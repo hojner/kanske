@@ -17,7 +17,8 @@ fn config_parse() -> AppResult<()> {
     //     output DP-1 enable mode 3440x1440@60.00Hz position 0,0 scale 1.0
     //     output eDP-1 disable
     // }";
-    let test_str = "output DP-1 enable mode 3440x1440@60.00z position 3,5 scale 1.0";
+    let test_str = "output DP-1 enable scale 1.0 mode 3440x1440@60.00Hz position 3,5";
+    println!("{:?}", test_str);
     let output = Output::from_str(test_str);
     println!("{:?}", output);
     Ok(())

@@ -116,34 +116,36 @@ impl FromStr for Output {
             .ok_or_else(|| {
                 KanskeError::ParsedStringUnexpectedFormat("enable string formatting".to_string())
             })?;
-        let mode = parts
-            .next()
-            .and_then(|m| {
-                if m == "mode" {
-                    parts.next().map(|m| Mode::from_str(m))
-                } else {
-                    None
+        let mut mode = None;
+        let mut position = None;
+        let mut scale = None;
+        while let Some(keyword) = parts.next() {
+            match keyword {
+                "mode" => {
+                    let mode_str = parts.next().ok_or_else(|| {
+                        KanskeError::ParsedStringUnexpectedFormat("no mode part".to_string())
+                    })?;
+                    mode = Some(Mode::from_str(mode_str)?);
                 }
-            })
-            .transpose()?;
-        let position = parts
-            .next()
-            .and_then(|p| {
-                if p == "position" {
-                    parts.next().map(|pos| Position::from_str(pos))
-                } else {
-                    None
+                "position" => {
+                    let pos_str = parts.next().ok_or_else(|| {
+                        KanskeError::ParsedStringUnexpectedFormat("no position part".to_string())
+                    })?;
+                    position = Some(Position::from_str(pos_str)?);
                 }
-            })
-            .transpose()?;
-        let scale = parts.next().and_then(|s| {
-            if s == "scale" {
-                parts.next().and_then(|s| Scale::from_str(s).ok())
-            } else {
-                None
+                "scale" => {
+                    let scale_str = parts.next().ok_or_else(|| {
+                        KanskeError::ParsedStringUnexpectedFormat("no scale part".to_string())
+                    })?;
+                    scale = Some(Scale::from_str(scale_str)?);
+                }
+                _ => {
+                    return Err(KanskeError::ParsedStringUnexpectedFormat(
+                        "unexpected element in output string".to_string(),
+                    ));
+                }
             }
-        });
-
+        }
         Ok(Output {
             name,
             enable,
