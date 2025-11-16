@@ -1,5 +1,5 @@
 [package]
-name = "kanske-app"
+name = "kanske"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -12,5 +12,5 @@ wayland-protocols.workspace = true
 wayland-protocols-wlr.workspace = true
 
 [[bin]]
-name = "kanske-app"
+name = "kanske"
 path = "src/main.rs"

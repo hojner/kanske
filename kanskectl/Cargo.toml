@@ -1,5 +1,5 @@
 [package]
-name = "kanske-ctl"
+name = "kanskectl"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -9,5 +9,5 @@ license.workspace = true
 kanske-lib = { path = "../kanske-lib" }
 
 [[bin]]
-name = "kanske-ctl"
+name = "kanskectl"
 path = "src/main.rs"

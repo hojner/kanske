@@ -1,6 +1,5 @@
 pub mod error;
 pub mod parser;
-pub mod parser_new;
 
 pub use error::{AppResult, KanskeError};
 

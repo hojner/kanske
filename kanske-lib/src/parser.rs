@@ -16,7 +16,7 @@ pub struct Position {
 }
 
 #[derive(Debug)]
-pub struct Scale(f32);
+pub struct Scale(pub f32);
 
 #[derive(Debug)]
 pub struct Output {
@@ -27,220 +27,125 @@ pub struct Output {
     pub scale: Option<Scale>,
 }
 
-// impl FromStr for Mode {
-//     type Err = KanskeError;
+impl FromStr for Mode {
+    type Err = KanskeError;
 
-//     // "output DP-1 enable mode 3440x1440@60.00Hz position 3,5 scale 1.0"
-//     fn from_str(s: &str) -> AppResult<Self> {
-//         let mode_str = s.replace("x", " ").replace("@", " ").replace("Hz", " ");
-//         let mut mode_parts = mode_str.split_whitespace();
-//         let width = mode_parts
-//             .next()
-//             .and_then(|w| w.parse().ok())
-//             .ok_or_else(|| KanskeError::ParsedStringUnexpectedFormat("width".to_string()))?;
+    fn from_str(s: &str) -> AppResult<Self> {
+        let mode_str = s.replace("x", " ").replace("@", " ").replace("Hz", " ");
+        let mut mode_parts = mode_str.split_whitespace();
+        let width = mode_parts
+            .next()
+            .and_then(|w| w.parse().ok())
+            .ok_or_else(|| KanskeError::ParsedStringUnexpectedFormat("width".to_string()))?;
 
-//         let height = mode_parts
-//             .next()
-//             .and_then(|w| w.parse().ok())
-//             .ok_or_else(|| KanskeError::ParsedStringUnexpectedFormat("width".to_string()))?;
+        let height = mode_parts
+            .next()
+            .and_then(|h| h.parse().ok())
+            .ok_or_else(|| KanskeError::ParsedStringUnexpectedFormat("height".to_string()))?;
 
-//         let frequency = mode_parts
-//             .next()
-//             .and_then(|w| w.parse().ok())
-//             .ok_or_else(|| KanskeError::ParsedStringUnexpectedFormat("width".to_string()))?;
-//     }
-// }
+        let frequency = mode_parts
+            .next()
+            .and_then(|f| f.parse().ok())
+            .ok_or_else(|| KanskeError::ParsedStringUnexpectedFormat("frequency".to_string()))?;
+
+        Ok(Mode {
+            width,
+            height,
+            frequency,
+        })
+    }
+}
+
+impl FromStr for Position {
+    type Err = KanskeError;
+
+    fn from_str(s: &str) -> AppResult<Self> {
+        let mut position_str = s.split(",");
+
+        let x: u32 = position_str
+            .next()
+            .and_then(|x| x.parse::<u32>().ok())
+            .ok_or_else(|| KanskeError::ParsedStringUnexpectedFormat("position".to_string()))?;
+
+        let y = position_str
+            .next()
+            .and_then(|y| y.parse().ok())
+            .ok_or_else(|| KanskeError::ParsedStringUnexpectedFormat("position".to_string()))?;
+
+        Ok(Position { x, y })
+    }
+}
+
+impl FromStr for Scale {
+    type Err = KanskeError;
+
+    fn from_str(s: &str) -> AppResult<Self> {
+        s.parse::<f32>()
+            .map(Scale)
+            .map_err(|_| KanskeError::ParsedStringUnexpectedFormat("scale".to_string()))
+    }
+}
 
 impl FromStr for Output {
     type Err = KanskeError;
 
     fn from_str(s: &str) -> AppResult<Self> {
-        let mut parts = s.split_whitespace().peekable();
-        let name;
-        let enable;
-        let mode;
-        let position;
-        let scale;
-        if parts.next() == Some(&"output") {
-            name = match parts.next() {
-                Some(n) => Arc::from(n),
-                None => return Err(KanskeError::ParsedStringIsEmpty),
-            };
-            enable = match parts.next() {
-                Some("enable") => true,
-                Some("disable") => false,
-                Some(e) => return Err(KanskeError::ParsedStringUnexpectedFormat(e.to_string())),
-                None => return Err(KanskeError::ParsedStringIsEmpty),
-            };
-            mode = match parts.next() {
-                Some("mode") => {
-                    let mode_component = match parts.next() {
-                        Some(mc) => {
-                            let mode_str =
-                                mc.replace("x", ";").replace("@", ";").replace("Hz", ";");
-                            let mut mode_parts = mode_str.split(";");
-                            let width = match mode_parts.next() {
-                                Some(w) => match w.parse() {
-                                    Ok(num) => num,
-                                    Err(_) => {
-                                        return Err(KanskeError::ParsedStringUnexpectedFormat(
-                                            "width".to_string(),
-                                        ));
-                                    }
-                                },
-                                None => {
-                                    return Err(KanskeError::ParsedStringUnexpectedFormat(
-                                        "width".to_string(),
-                                    ));
-                                }
-                            };
-                            let height = match mode_parts.next() {
-                                Some(h) => match h.parse() {
-                                    Ok(num) => num,
-                                    Err(_) => {
-                                        return Err(KanskeError::ParsedStringUnexpectedFormat(
-                                            "height".to_string(),
-                                        ));
-                                    }
-                                },
-                                None => {
-                                    return Err(KanskeError::ParsedStringUnexpectedFormat(
-                                        "height".to_string(),
-                                    ));
-                                }
-                            };
-                            let frequency = match mode_parts.next() {
-                                Some(f) => match f.parse() {
-                                    Ok(freq) => freq,
-                                    Err(_) => {
-                                        return Err(KanskeError::ParsedStringUnexpectedFormat(
-                                            "freq".to_string(),
-                                        ));
-                                    }
-                                },
-                                None => {
-                                    return Err(KanskeError::ParsedStringUnexpectedFormat(
-                                        "freq".to_string(),
-                                    ));
-                                }
-                            };
-                            Mode {
-                                width,
-                                height,
-                                frequency,
-                            }
-                        }
-                        None => {
-                            return Err(KanskeError::ParsedStringUnexpectedFormat(
-                                "mode component".to_string(),
-                            ));
-                        }
-                    };
-                    Some(mode_component)
+        let mut parts = s.split_whitespace();
+        if parts.next() != Some("output") {
+            return Err(KanskeError::ParsedStringUnexpectedFormat(
+                "output keyword".to_string(),
+            ));
+        }
+        let name: Arc<str> = parts
+            .next()
+            .map(Arc::from)
+            .ok_or_else(|| KanskeError::ParsedStringUnexpectedFormat("name".to_string()))?;
+
+        let enable = parts
+            .next()
+            .and_then(|e| {
+                if e == "enable" {
+                    Some(true)
+                } else if e == "disable" {
+                    Some(false)
+                } else {
+                    None
                 }
-                Some(_) => {
+            })
+            .ok_or_else(|| {
+                KanskeError::ParsedStringUnexpectedFormat("enable string formatting".to_string())
+            })?;
+        let mut mode = None;
+        let mut position = None;
+        let mut scale = None;
+        while let Some(keyword) = parts.next() {
+            match keyword {
+                "mode" => {
+                    let mode_str = parts.next().ok_or_else(|| {
+                        KanskeError::ParsedStringUnexpectedFormat("no mode part".to_string())
+                    })?;
+                    mode = Some(Mode::from_str(mode_str)?);
+                }
+                "position" => {
+                    let pos_str = parts.next().ok_or_else(|| {
+                        KanskeError::ParsedStringUnexpectedFormat("no position part".to_string())
+                    })?;
+                    position = Some(Position::from_str(pos_str)?);
+                }
+                "scale" => {
+                    let scale_str = parts.next().ok_or_else(|| {
+                        KanskeError::ParsedStringUnexpectedFormat("no scale part".to_string())
+                    })?;
+                    scale = Some(Scale::from_str(scale_str)?);
+                }
+                _ => {
                     return Err(KanskeError::ParsedStringUnexpectedFormat(
-                        "mode".to_string(),
-                    ));
-                }
-                None => {
-                    return Err(KanskeError::ParsedStringUnexpectedFormat(
-                        "mode".to_string(),
-                    ));
-                }
-            };
-            position = match parts.next() {
-                Some("position") => {
-                    let position_component = match parts.next() {
-                        Some(pc) => {
-                            let mut pos = pc.split(",");
-                            let x = match pos.next() {
-                                Some(x) => match x.parse() {
-                                    Ok(n) => n,
-                                    Err(_e) => {
-                                        return Err(KanskeError::ParsedStringUnexpectedFormat(
-                                            "position".to_string(),
-                                        ));
-                                    }
-                                },
-                                None => {
-                                    return Err(KanskeError::ParsedStringUnexpectedFormat(
-                                        "postion".to_string(),
-                                    ));
-                                }
-                            };
-                            let y = match pos.next() {
-                                Some(x) => match x.parse() {
-                                    Ok(n) => n,
-                                    Err(_e) => {
-                                        return Err(KanskeError::ParsedStringUnexpectedFormat(
-                                            "position".to_string(),
-                                        ));
-                                    }
-                                },
-                                None => {
-                                    return Err(KanskeError::ParsedStringUnexpectedFormat(
-                                        "postion".to_string(),
-                                    ));
-                                }
-                            };
-                            Position { x, y }
-                        }
-                        None => {
-                            return Err(KanskeError::ParsedStringUnexpectedFormat(
-                                "postion".to_string(),
-                            ));
-                        }
-                    };
-                    Some(position_component)
-                }
-                Some(_) => {
-                    return Err(KanskeError::ParsedStringUnexpectedFormat(
-                        "position".to_string(),
-                    ));
-                }
-                None => {
-                    return Err(KanskeError::ParsedStringUnexpectedFormat(
-                        "position".to_string(),
-                    ));
-                }
-            };
-            scale = match parts.next() {
-                Some("scale") => match parts.next() {
-                    Some(sc) => match sc.parse::<f32>() {
-                        Ok(n) => Some(Scale(n)),
-                        Err(_) => {
-                            return Err(KanskeError::ParsedStringUnexpectedFormat(
-                                "scale".to_string(),
-                            ));
-                        }
-                    },
-                    None => {
-                        return Err(KanskeError::ParsedStringUnexpectedFormat(
-                            "scale".to_string(),
-                        ));
-                    }
-                },
-                Some(_) => {
-                    return Err(KanskeError::ParsedStringUnexpectedFormat(
-                        "scale".to_string(),
-                    ));
-                }
-                None => {
-                    return Err(KanskeError::ParsedStringUnexpectedFormat(
-                        "scale".to_string(),
+                        "unexpected element in output string".to_string(),
                     ));
                 }
             }
-        } else if parts.next() == None {
-            return Err(KanskeError::ParsedStringIsEmpty);
-        } else {
-            return Err(KanskeError::ParsedStringUnexpectedFormat(
-                "output".to_string(),
-            ));
         }
-        if parts.next() == Some(&"postion") {}
-        Ok(Self {
+        Ok(Output {
             name,
             enable,
             mode,

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use kanske_lib::{
     AppResult, AppState,
-    parser_new::{FromStr, Output},
+    parser::{FromStr, Output},
 };
 use wayland_client::Connection;
 
