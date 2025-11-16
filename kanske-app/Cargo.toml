@@ -1,0 +1,16 @@
+[package]
+name = "kanske-app"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+kanske-lib = { path = "../kanske-lib" }
+wayland-client.workspace = true
+wayland-protocols.workspace = true
+wayland-protocols-wlr.workspace = true
+
+[[bin]]
+name = "kanske-app"
+path = "src/main.rs"

@@ -1,0 +1,13 @@
+[package]
+name = "kanske-ctl"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+kanske-lib = { path = "../kanske-lib" }
+
+[[bin]]
+name = "kanske-ctl"
+path = "src/main.rs"

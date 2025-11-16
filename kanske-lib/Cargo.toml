@@ -1,0 +1,15 @@
+[package]
+name = "kanske-lib"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+wayland-client.workspace = true
+wayland-protocols.workspace = true
+wayland-protocols-wlr.workspace = true
+
+[lib]
+name = "kanske_lib"
+path = "src/lib.rs"
