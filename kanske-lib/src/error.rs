@@ -6,7 +6,8 @@ pub enum KanskeError {
     WaylandConnectError(wayland_client::ConnectError),
     ParsedStringIsEmpty,
     ParsedStringUnexpectedFormat(String),
-    ParseInt(ParseIntError),
+    ReadIOError(std::io::Error),
+    LimitedFunctionError(String),
 }
 
 pub type AppResult<T> = std::result::Result<T, KanskeError>;

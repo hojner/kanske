@@ -1,15 +1,13 @@
+use std::str::FromStr;
 use std::sync::Arc;
 
-use kanske_lib::{
-    AppResult, AppState,
-    parser::{FromStr, Output},
-};
+use kanske_lib::{AppResult, AppState, parser::output_parser::types::Params};
 use wayland_client::Connection;
 
 struct OutputConfig {
     profile: bool,
     name: Arc<str>,
-    outputs: Arc<[Output]>,
+    outputs: Arc<[Params]>,
 }
 
 fn config_parse() -> AppResult<()> {
@@ -19,7 +17,7 @@ fn config_parse() -> AppResult<()> {
     // }";
     let test_str = "output DP-1 enable scale 1.0 mode 3440x1440@60.00Hz position 3,5";
     println!("{:?}", test_str);
-    let output = Output::from_str(test_str);
+    let output = Params::from_str(test_str);
     println!("{:?}", output);
     Ok(())
 }
@@ -59,7 +57,8 @@ fn print_heads(state: &AppState) {
     println!();
 }
 
-fn main() -> AppResult<()> {
+#[tokio::main]
+async fn main() -> AppResult<()> {
     let _ = config_parse();
     // let conn = match Connection::connect_to_env() {
     //     Ok(c) => c,
