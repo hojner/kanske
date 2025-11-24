@@ -3,6 +3,10 @@ use crate::{AppResult, KanskeError};
 use std::str::FromStr;
 use std::sync::Arc;
 
+// -------------------------
+// FromStr for Mode
+// -------------------------
+
 impl FromStr for Mode {
     type Err = KanskeError;
 
@@ -32,6 +36,10 @@ impl FromStr for Mode {
     }
 }
 
+// -------------------------
+// FromStr for Position
+// -------------------------
+
 impl FromStr for Position {
     type Err = KanskeError;
 
@@ -52,6 +60,10 @@ impl FromStr for Position {
     }
 }
 
+// -------------------------
+// FromStr for Scale
+// -------------------------
+
 impl FromStr for Scale {
     type Err = KanskeError;
 
@@ -62,6 +74,10 @@ impl FromStr for Scale {
     }
 }
 
+// -------------------------
+// FromStr for Transform
+// -------------------------
+
 impl FromStr for Transform {
     type Err = KanskeError;
 
@@ -69,6 +85,10 @@ impl FromStr for Transform {
         Ok(Transform(Arc::from(s)))
     }
 }
+
+// -------------------------
+// FromStr for AdaptiveSync
+// -------------------------
 
 impl FromStr for AdaptiveSync {
     type Err = KanskeError;
@@ -84,6 +104,10 @@ impl FromStr for AdaptiveSync {
     }
 }
 
+// ------------------------
+// FromStr for Alias
+// ------------------------
+
 impl FromStr for Alias {
     type Err = KanskeError;
 
@@ -92,24 +116,22 @@ impl FromStr for Alias {
     }
 }
 
+// ------------------------
+// FromStr for Params
+// ------------------------
+
 impl FromStr for Params {
     type Err = KanskeError;
 
     fn from_str(s: &str) -> AppResult<Self> {
         let mut parts = s.split_whitespace();
-        if parts.next() != Some("output") {
-            return Err(KanskeError::ParsedStringUnexpectedFormat(
-                "output keyword".to_string(),
-            ));
-        }
         let mut params = Params::new();
-        params.name = parts
-            .next()
-            .map(Arc::from)
-            .ok_or_else(|| KanskeError::ParsedStringUnexpectedFormat("monitor_type".to_string()))?;
+
+        dbg!(&parts);
 
         params.enable = parts.next().and_then(|e| {
             if e == "enable" {
+                println!("This is in the enable block");
                 Some(true)
             } else if e == "disable" {
                 Some(false)
@@ -157,9 +179,9 @@ impl FromStr for Params {
                     })?;
                     params.alias = Some(Alias::from_str(alias_str)?);
                 }
-                _ => {
+                other => {
                     return Err(KanskeError::ParsedStringUnexpectedFormat(
-                        "unexpected element in output string".to_string(),
+                        format!("unexpected element in output string: {}", other).to_string(),
                     ));
                 }
             }

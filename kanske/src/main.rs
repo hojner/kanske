@@ -1,7 +1,11 @@
-use std::str::FromStr;
 use std::sync::Arc;
+use std::{path::PathBuf, str::FromStr};
 
-use kanske_lib::{AppResult, AppState, parser::output_parser::types::Params};
+use kanske_lib::parser::block_parser;
+use kanske_lib::{
+    AppResult, AppState,
+    parser::block_parser::{parse_file, types::Params},
+};
 use wayland_client::Connection;
 
 struct OutputConfig {
@@ -10,15 +14,15 @@ struct OutputConfig {
     outputs: Arc<[Params]>,
 }
 
-fn config_parse() -> AppResult<()> {
+async fn config_parse() -> AppResult<()> {
     //     let test_config = "profile work-A {
     //     output DP-1 enable mode 3440x1440@60.00Hz position 0,0 scale 1.0
     //     output eDP-1 disable
     // }";
-    let test_str = "output DP-1 enable scale 1.0 mode 3440x1440@60.00Hz position 3,5";
-    println!("{:?}", test_str);
-    let output = Params::from_str(test_str);
-    println!("{:?}", output);
+    // let test_str = /*DP-1 */"enable scale 1.0 mode 3440x1440@60.00Hz position 3,5";
+    // println!("{:?}", test_str);
+    let output = parse_file(PathBuf::from("./test.txt")).await;
+    println!("{:?}", output?);
     Ok(())
 }
 
@@ -59,7 +63,7 @@ fn print_heads(state: &AppState) {
 
 #[tokio::main]
 async fn main() -> AppResult<()> {
-    let _ = config_parse();
+    let _ = config_parse().await;
     // let conn = match Connection::connect_to_env() {
     //     Ok(c) => c,
     //     Err(e) => return Err(KanskeError::WaylandConnectError(e)),

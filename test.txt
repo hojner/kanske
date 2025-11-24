@@ -1,0 +1,9 @@
+# This is a comment
+output DP-1 enable position 0,0 { 
+     enable
+     mode 1920x1200@60Hz
+     position 0,0
+     scale 2.0
+     transform 90
+     adaptive_sync off
+}
