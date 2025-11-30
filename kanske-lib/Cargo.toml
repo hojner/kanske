@@ -10,6 +10,10 @@ wayland-client.workspace = true
 wayland-protocols.workspace = true
 wayland-protocols-wlr.workspace = true
 
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+tempfile = "3"
+
 [lib]
 name = "kanske_lib"
 path = "src/lib.rs"

@@ -63,7 +63,7 @@ fn print_heads(state: &AppState) {
 
 #[tokio::main]
 async fn main() -> AppResult<()> {
-    let _ = config_parse().await;
+    config_parse().await?;
     // let conn = match Connection::connect_to_env() {
     //     Ok(c) => c,
     //     Err(e) => return Err(KanskeError::WaylandConnectError(e)),
