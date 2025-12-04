@@ -15,7 +15,7 @@ pub enum ParserState {
     InProfile(Arc<str>),
 }
 
-pub async fn parse_file(path: PathBuf) -> AppResult<Directive> {
+pub async fn parse_file(path: PathBuf) -> AppResult<Vec<Directive>> {
     let config_file = match fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => return Err(KanskeError::ReadIOError(e)),
@@ -38,24 +38,38 @@ pub async fn parse_file(path: PathBuf) -> AppResult<Directive> {
             "The number of { and } does not match".to_string(),
         ));
     }
-    let result = recursive_read(text_for_parsing);
+    let top_level_vec: Vec<Directive> = Vec::new();
+    let result = recursive_read(text_for_parsing, top_level_vec);
     result
 }
 
-fn recursive_read(mut text: BTreeMap<usize, &str>) -> AppResult<Directive> {
+fn recursive_read(
+    mut text: BTreeMap<usize, &str>,
+    mut dir_vec: Vec<Directive>,
+) -> AppResult<Vec<Directive>> {
     if text.len() == 0 {
         return Err(KanskeError::ParsedStringIsEmpty);
     } else if text.len() == 1 {
-        // todo!("one-line parsing not implemented")
-        return Directive::from_line(text);
+        let directive = Directive::from_line(text)?;
+        dir_vec.push(directive);
+        return Ok(dir_vec);
     } else {
+        // --------------------
+        // From here text == block
+        // --------------------
         let (line_no, first_line) = text
             .pop_first()
             .ok_or_else(|| KanskeError::ParsedStringIsEmpty)?;
+        let mut first_entry = BTreeMap::new();
+        first_entry.insert(line_no, first_line);
+
         if first_line.contains("{") {
+            let child_vec: Vec<Directive> = Vec::new();
+
             // ------------------
             // Block för depth-checking and block creation
             // ------------------
+
             let mut depth = 1;
             let mut key: usize = 0;
             let mut block = text.iter();
@@ -83,19 +97,24 @@ fn recursive_read(mut text: BTreeMap<usize, &str>) -> AppResult<Directive> {
                     key = *i;
                 }
             }
+
             // -----------------
             // End of block
             // -----------------
-            let rest_of_text = text.split_off(&key);
-            dbg!(&text, &rest_of_text);
-            let child = recursive_read(text);
-            dbg!(&child);
+
+            let mut directive = Directive::from_line(first_entry)?;
+            let tail = text.split_off(&key);
+            dbg!(&text, &tail);
+            let child = recursive_read(text, child_vec)?;
+            directive.children = Some(Box::new(child));
+            dbg!(&directive);
+            return Ok(dir_vec);
         } else {
             dbg!(first_line);
-            // text.pop_first();
-            let next = recursive_read(text);
+            let directive = Directive::from_line(first_entry)?;
+            let mut next = recursive_read(text, dir_vec)?;
+            next.push(directive);
+            return Ok(next);
         }
     }
-    todo!("recursive read not yet implemented")
-    // Ok(Directive::from_line(text)?)
 }
