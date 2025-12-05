@@ -1,19 +1,7 @@
 pub mod types;
 
-use std::{collections::BTreeMap, fs, io::Lines, path::PathBuf, sync::Arc};
-
-use crate::{
-    AppResult, KanskeError,
-    parser::{
-        block_parser::types::{Directive, Params},
-        profile_parser::Profile,
-    },
-};
-
-pub enum ParserState {
-    Toplevel,
-    InProfile(Arc<str>),
-}
+use crate::{AppResult, KanskeError, parser::block_parser::types::Directive};
+use std::{collections::BTreeMap, fs, path::PathBuf};
 
 pub async fn parse_file(path: PathBuf) -> AppResult<Vec<Directive>> {
     let config_file = match fs::read_to_string(path) {
@@ -24,9 +12,9 @@ pub async fn parse_file(path: PathBuf) -> AppResult<Vec<Directive>> {
         .lines()
         .by_ref()
         .enumerate()
+        .map(|(i, l)| (i + 1, l))
         .filter(|(_, l)| !l.starts_with("#") && !l.is_empty())
         .collect::<BTreeMap<usize, &str>>();
-    dbg!(&text_for_parsing);
     let (open, close) = text_for_parsing.values().fold((0, 0), |(open, close), s| {
         (
             open + s.matches('{').count(),
@@ -40,6 +28,7 @@ pub async fn parse_file(path: PathBuf) -> AppResult<Vec<Directive>> {
     }
     let top_level_vec: Vec<Directive> = Vec::new();
     let result = recursive_read(text_for_parsing, top_level_vec);
+    dbg!(&result);
     result
 }
 
@@ -47,6 +36,7 @@ fn recursive_read(
     mut text: BTreeMap<usize, &str>,
     mut dir_vec: Vec<Directive>,
 ) -> AppResult<Vec<Directive>> {
+    dbg!(&dir_vec);
     if text.len() == 0 {
         return Err(KanskeError::ParsedStringIsEmpty);
     } else if text.len() == 1 {
@@ -65,11 +55,9 @@ fn recursive_read(
 
         if first_line.contains("{") {
             let child_vec: Vec<Directive> = Vec::new();
-
             // ------------------
             // Block för depth-checking and block creation
             // ------------------
-
             let mut depth = 1;
             let mut key: usize = 0;
             let mut block = text.iter();
@@ -97,20 +85,17 @@ fn recursive_read(
                     key = *i;
                 }
             }
-
             // -----------------
             // End of block
             // -----------------
-
+            dbg!(&first_entry);
             let mut directive = Directive::from_line(first_entry)?;
             let tail = text.split_off(&key);
-            dbg!(&text, &tail);
             let child = recursive_read(text, child_vec)?;
             directive.children = Some(Box::new(child));
-            dbg!(&directive);
+            dir_vec.push(directive);
             return Ok(dir_vec);
         } else {
-            dbg!(first_line);
             let directive = Directive::from_line(first_entry)?;
             let mut next = recursive_read(text, dir_vec)?;
             next.push(directive);

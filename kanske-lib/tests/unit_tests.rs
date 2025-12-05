@@ -1,7 +1,7 @@
 // Unit tests for individual parser components
 
-use kanske_lib::parser::block_parser::types::Mode;
 use kanske_lib::KanskeError;
+use kanske_lib::parser::block_parser::types::Mode;
 
 // ============================================================================
 // MODE PARSING TESTS
@@ -12,7 +12,7 @@ fn test_mode_with_refresh_and_hz() {
     // Mode needs to be public to test, or we need a public API
     // For now, this test shows the expected behavior
     // You may need to expose Mode::from_line as pub or use #[cfg(test)] pub
-    
+
     // Example of what we want to test:
     // let mode = Mode::from_line("1920x1080@60Hz").unwrap();
     // assert_eq!(mode.width, 1920);

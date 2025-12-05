@@ -9,7 +9,7 @@ output DP-1 mode 1200x1400@60Hz enable position 0,0 { }{
      scale 2.0
      transform 90
      adaptive_sync off
-     {
+     output DP-2 {
           mode 1920x1200@60Hz
      }
 }

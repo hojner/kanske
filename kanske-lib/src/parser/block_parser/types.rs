@@ -31,37 +31,44 @@ impl Params {
             alias: None,
         }
     }
-    fn from_line(line: &str) -> AppResult<Params> {
-        dbg!(&line);
-        let mut param = Params::new();
-        let mut txt_part;
-        let line_parts = line.split_whitespace();
-        while let Some(txt) = line_parts.next() {
-            dbg!(txt);
-            match txt {
-                "output" => param.name = line_parts.next().map(|s| s.to_string()),
-                "mode" => param.mode = line_parts.next().map(|s| Mode::from_line(s)).transpose()?,
-                "position" => line_parts.next().map(Position { x, y }),
-                "scale" => line_parts.next().map(Scale),
-                "transform" => line_parts.next().map(Transform),
-                "adaptive_sync" => line_parts.next().map(AdaptiveSync),
-                "alias" => todo!("alias"),
-                "alias" => line_parts.next().map(Alias),
-                _ => todo!("What to do with the rest?"),
-            };
-        }
 
-        Ok(Params {
-            name: None,
-            enable: None,
-            mode,
-            position: None,
-            scale: None,
-            transform: None,
-            adaptive_sync: None,
-            alias: None,
-        })
+    fn from_line(s: &str) -> AppResult<Params> {
+        let line = s.trim();
+        let mut param = Params::new();
+        let mut line_parts = line.split_whitespace();
+        while let Some(txt) = line_parts.next() {
+            if txt == "output" {
+                param.name = line_parts.next().map(|s| s.to_string());
+            } else if txt == "enable" {
+                param.enable = Some(true);
+            } else if txt == "disable" {
+                param.enable = Some(false);
+            } else if txt == "mode" {
+                param.mode = line_parts.next().map(|s| Mode::from_line(s)).transpose()?;
+            } else if txt == "position" {
+                param.position = line_parts
+                    .next()
+                    .map(|s| Position::from_line(s))
+                    .transpose()?;
+            } else if txt == "scale" {
+                param.scale = line_parts.next().map(|s| Scale::from_line(s)).transpose()?;
+            } else if txt == "transform" {
+                param.transform = line_parts
+                    .next()
+                    .map(|s| Transform::from_line(s))
+                    .transpose()?;
+            } else if txt == "adaptive_sync" {
+                param.adaptive_sync = line_parts
+                    .next()
+                    .map(|s| AdaptiveSync::from_line(s))
+                    .transpose()?;
+            } else if txt == "alias" {
+                param.alias = line_parts.next().map(|s| Alias::from_line(s)).transpose()?;
+            }
+        }
+        Ok(param)
     }
+
     fn count_some(&self) -> AppResult<usize> {
         let mut count: usize = 0;
         if self.name.is_some() {
@@ -95,6 +102,10 @@ impl Params {
 // --------------------------
 // This code block is for sub-types of the Params type
 // -------------------------
+//
+// -------------------------
+// Mode type and impl
+// -------------------------
 
 #[derive(Debug)]
 pub struct Mode {
@@ -105,10 +116,6 @@ pub struct Mode {
 
 impl Mode {
     pub fn from_line(line: &str) -> AppResult<Mode> {
-        // let (_, mode_str) = line.split_once(' ').ok_or_else(|| {
-        //     KanskeError::ParsedStringUnexpectedFormat("Wrong mode string format".to_string())
-        // })?;
-
         let mode_str = line.trim();
 
         let (dimensions, freq_part) = if let Some((dims, freq)) = mode_str.split_once('@') {
@@ -153,6 +160,10 @@ impl Mode {
     }
 }
 
+// -------------------
+// Position and impl
+// ------------------
+
 #[derive(Debug)]
 pub struct Position {
     pub x: u32,
@@ -160,24 +171,122 @@ pub struct Position {
 }
 
 impl Position {
-    pub fn from_line(line: &str) -> AppResult<Self> {}
+    pub fn from_line(line: &str) -> AppResult<Self> {
+        let mut position_str = line.split(",");
+
+        let x: u32 = position_str
+            .next()
+            .and_then(|x| x.parse::<u32>().ok())
+            .ok_or_else(|| KanskeError::ParsedStringUnexpectedFormat("position".to_string()))?;
+
+        let y = position_str
+            .next()
+            .and_then(|y| y.parse().ok())
+            .ok_or_else(|| KanskeError::ParsedStringUnexpectedFormat("position".to_string()))?;
+
+        Ok(Position { x, y })
+    }
 }
+
+// --------------------
+// Scale and impl
+// --------------------
 
 #[derive(Debug)]
 pub struct Scale(pub f32);
 
+impl Scale {
+    fn from_line(s: &str) -> AppResult<Self> {
+        let parsed = s.parse::<f32>().map_err(|_| {
+            KanskeError::ParsedStringUnexpectedFormat(
+                "Error in Scale field float parsing".to_string(),
+            )
+        })?;
+        Ok(Self(parsed))
+    }
+}
+
+// ------------------------
+// Transform and impl
+// ------------------------
+
 #[derive(Debug)]
-pub struct Transform(pub Arc<str>);
+pub enum Transform {
+    Normal,
+    Rotate90,
+    Rotate180,
+    Rotate270,
+    Flipped,
+    Flipped90,
+    Flipped180,
+    Flipped270,
+}
+
+impl Transform {
+    fn from_line(s: &str) -> AppResult<Self> {
+        match s.trim() {
+            "normal" => Ok(Transform::Normal),
+            "90" => Ok(Transform::Rotate90),
+            "180" => Ok(Transform::Rotate180),
+            "270" => Ok(Transform::Rotate270),
+            "flipped" => Ok(Transform::Flipped),
+            "flipped-90" => Ok(Transform::Flipped90),
+            "flipped-180" => Ok(Transform::Flipped180),
+            "flipped-270" => Ok(Transform::Flipped270),
+            _ => Err(KanskeError::ParsedStringUnexpectedFormat(
+                "Transform field parsing error".to_string(),
+            )),
+        }
+    }
+}
+
+// ---------------------
+// Adaptive Sync and impl
+// ---------------------
 
 #[derive(Debug)]
 pub struct AdaptiveSync(pub bool);
 
+impl AdaptiveSync {
+    fn from_line(s: &str) -> AppResult<Self> {
+        match s.trim() {
+            "on" => Ok(Self(true)),
+            "off" => Ok(Self(false)),
+            _ => Err(KanskeError::ParsedStringUnexpectedFormat(
+                "Adaptive Sync parse error".to_string(),
+            )),
+        }
+    }
+}
+
+// ---------------------
+// Alias and impl
+// ---------------------
+
 #[derive(Debug)]
 pub struct Alias(pub Arc<str>);
 
+impl Alias {
+    fn from_line(s: &str) -> AppResult<Self> {
+        let s_trim = s.trim();
+        if !s_trim.starts_with("$") || s_trim.is_empty() || s_trim == "$" {
+            return Err(KanskeError::ParsedStringUnexpectedFormat(
+                "Wring format alias string".to_string(),
+            ));
+        } else {
+            let alias = Arc::from(
+                s_trim
+                    .strip_prefix("$")
+                    .expect("We have checked the string already"),
+            );
+            Ok(Self(alias))
+        }
+    }
+}
+
 // --------------------------
-// This code block is for the Directive type
-// -------------------------
+// Directive type and impl
+// --------------------------
 
 #[derive(Debug)]
 pub struct Directive {
@@ -188,9 +297,6 @@ pub struct Directive {
     pub line_no: usize,
 }
 
-//
-// Directive is always created from a single line from the config file.
-//
 impl Directive {
     pub fn from_line(map: BTreeMap<usize, &str>) -> AppResult<Self> {
         let (line_no, params_str) = map.first_key_value().ok_or_else(|| {
@@ -198,16 +304,15 @@ impl Directive {
                 "Could not parse map for the first line into Directive".to_string(),
             )
         })?;
-        let (name, params) = params_str.split_once(" ").ok_or_else(|| {
+        let (name, _params) = params_str.split_once(" ").ok_or_else(|| {
             KanskeError::ParsedStringUnexpectedFormat(format!(
                 "Directive has the wrong format, should be <name> <parameters>. Config line: {}",
                 line_no
             ))
         })?;
-        if name == "output" {}
-        let params = Params::from_line(params_str)?;
+        let params = Params::from_line(params_str.trim())?;
         let params_len = params.count_some()?;
-        dbg!(name, &params);
+
         Ok(Self {
             name: Arc::from(name),
             params,

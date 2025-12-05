@@ -22,7 +22,9 @@ async fn config_parse() -> AppResult<()> {
     // let test_str = /*DP-1 */"enable scale 1.0 mode 3440x1440@60.00Hz position 3,5";
     // println!("{:?}", test_str);
     let output = parse_file(PathBuf::from("./test.txt")).await;
-    println!("{:?}", output?);
+    for i in output.iter() {
+        dbg!(i);
+    }
     Ok(())
 }
 

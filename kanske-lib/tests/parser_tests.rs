@@ -25,8 +25,16 @@ fn assert_directive_name(directive: &Directive, expected_name: &str) {
 }
 
 // Helper to check if mode is parsed correctly
-fn assert_mode(directive: &Directive, expected_width: u32, expected_height: u32, expected_freq: Option<f32>) {
-    let mode = directive.params.mode.as_ref()
+fn assert_mode(
+    directive: &Directive,
+    expected_width: u32,
+    expected_height: u32,
+    expected_freq: Option<f32>,
+) {
+    let mode = directive
+        .params
+        .mode
+        .as_ref()
         .expect("Mode should be present");
     assert_eq!(mode.width, expected_width, "Width mismatch");
     assert_eq!(mode.height, expected_height, "Height mismatch");
@@ -43,7 +51,7 @@ async fn test_simple_mode_parsing() {
 output DP-1 mode 1920x1080@60Hz
 "#;
     let result = test_config_parse(config).await;
-    
+
     match result {
         Ok(directive) => {
             assert_directive_name(&directive, "output");
@@ -59,7 +67,7 @@ output DP-1 mode 1920x1080@60Hz
 async fn test_mode_high_refresh_rate() {
     let config = "output DP-1 mode 2560x1440@165Hz";
     let result = test_config_parse(config).await;
-    
+
     if let Ok(directive) = result {
         assert_mode(&directive, 2560, 1440, Some(165.0));
     } else {
@@ -71,7 +79,7 @@ async fn test_mode_high_refresh_rate() {
 async fn test_mode_4k_resolution() {
     let config = "output HDMI-1 mode 3840x2160@60Hz";
     let result = test_config_parse(config).await;
-    
+
     if let Ok(directive) = result {
         assert_mode(&directive, 3840, 2160, Some(60.0));
     }
@@ -81,7 +89,7 @@ async fn test_mode_4k_resolution() {
 async fn test_mode_fractional_refresh_rate() {
     let config = "output eDP-1 mode 1920x1080@59.94Hz";
     let result = test_config_parse(config).await;
-    
+
     if let Ok(directive) = result {
         assert_mode(&directive, 1920, 1080, Some(59.94));
     }
@@ -95,15 +103,18 @@ async fn test_mode_fractional_refresh_rate() {
 async fn test_invalid_mode_missing_x_separator() {
     let config = "output DP-1 mode 1920-1080@60Hz";
     let result = test_config_parse(config).await;
-    
-    assert!(result.is_err(), "Should fail: mode format missing 'x' separator");
+
+    assert!(
+        result.is_err(),
+        "Should fail: mode format missing 'x' separator"
+    );
 }
 
 #[tokio::test]
 async fn test_invalid_mode_non_numeric_width() {
     let config = "output DP-1 mode ABCDx1080@60Hz";
     let result = test_config_parse(config).await;
-    
+
     assert!(result.is_err(), "Should fail: width is not a number");
 }
 
@@ -111,7 +122,7 @@ async fn test_invalid_mode_non_numeric_width() {
 async fn test_invalid_mode_non_numeric_height() {
     let config = "output DP-1 mode 1920xABCD@60Hz";
     let result = test_config_parse(config).await;
-    
+
     assert!(result.is_err(), "Should fail: height is not a number");
 }
 
@@ -119,7 +130,7 @@ async fn test_invalid_mode_non_numeric_height() {
 async fn test_invalid_mode_non_numeric_refresh() {
     let config = "output DP-1 mode 1920x1080@ABCHz";
     let result = test_config_parse(config).await;
-    
+
     assert!(result.is_err(), "Should fail: refresh rate is not a number");
 }
 
@@ -131,7 +142,7 @@ profile test {
     {
 "#;
     let result = test_config_parse(config).await;
-    
+
     assert!(result.is_err(), "Should fail: mismatched opening braces");
 }
 
@@ -144,7 +155,7 @@ profile test {
 }
 "#;
     let result = test_config_parse(config).await;
-    
+
     assert!(result.is_err(), "Should fail: extra closing braces");
 }
 
@@ -152,7 +163,7 @@ profile test {
 async fn test_multiple_braces_same_line() {
     let config = "profile test { { output eDP-1 mode 1920x1080 } }";
     let result = test_config_parse(config).await;
-    
+
     assert!(result.is_err(), "Should fail: multiple braces on same line");
 }
 
@@ -160,6 +171,6 @@ async fn test_multiple_braces_same_line() {
 async fn test_empty_config_file() {
     let config = "";
     let result = test_config_parse(config).await;
-    
+
     assert!(result.is_err(), "Should fail: empty config file");
 }
