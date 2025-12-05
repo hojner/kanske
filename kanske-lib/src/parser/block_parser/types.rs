@@ -69,33 +69,20 @@ impl Params {
         Ok(param)
     }
 
-    fn count_some(&self) -> AppResult<usize> {
-        let mut count: usize = 0;
-        if self.name.is_some() {
-            count += 1
-        };
-        if self.enable.is_some() {
-            count += 1
-        };
-        if self.mode.is_some() {
-            count += 1
-        };
-        if self.position.is_some() {
-            count += 1
-        };
-        if self.scale.is_some() {
-            count += 1
-        };
-        if self.transform.is_some() {
-            count += 1
-        };
-        if self.adaptive_sync.is_some() {
-            count += 1
-        };
-        if self.alias.is_some() {
-            count += 1
-        };
-        Ok(count)
+    fn count_some(&self) -> usize {
+        [
+            self.name.is_some(),
+            self.enable.is_some(),
+            self.mode.is_some(),
+            self.position.is_some(),
+            self.scale.is_some(),
+            self.transform.is_some(),
+            self.adaptive_sync.is_some(),
+            self.alias.is_some(),
+        ]
+        .iter()
+        .filter(|&&x| x)
+        .count()
     }
 }
 
@@ -304,12 +291,18 @@ impl Directive {
                 "Could not parse map for the first line into Directive".to_string(),
             )
         })?;
-        let (name, _params) = params_str.split_once(" ").ok_or_else(|| {
+        let name;
+        if params_str.starts_with("enable") || params_str.starts_with("disable") {
+            name = "enable";
+        // } else if params_str.starts_with("}") {
+        } else {
+            (name, _) = params_str.split_once(" ").ok_or_else(|| {
             KanskeError::ParsedStringUnexpectedFormat(format!(
                 "Directive has the wrong format, should be <name> <parameters>. Config line: {}",
                 line_no
             ))
         })?;
+        }
         let params = Params::from_line(params_str.trim())?;
         let params_len = params.count_some()?;
 
