@@ -1,6 +1,5 @@
 // Unit tests for individual parser components
 
-use kanske_lib::KanskeError;
 use kanske_lib::parser::block_parser::types::Mode;
 
 // ============================================================================
@@ -23,8 +22,8 @@ fn test_mode_with_refresh_and_hz() {
 #[test]
 fn test_mode_with_refresh_no_hz() {
     let result = Mode::from_line("1920x1080@60");
-    // This should work based on current implementation
-    assert!(result.is_ok());
+    // Should fail: refresh rate requires "Hz" suffix
+    assert!(result.is_err());
 }
 
 #[test]
@@ -125,14 +124,14 @@ fn test_mode_negative_dimensions() {
 
 #[test]
 fn test_mode_zero_width() {
-    let result = Mode::from_line("0x1080");
+    let _result = Mode::from_line("0x1080");
     // Parsing might succeed but validation should catch this
     // Adjust based on implementation
 }
 
 #[test]
 fn test_mode_zero_height() {
-    let result = Mode::from_line("1920x0");
+    let _result = Mode::from_line("1920x0");
     // Parsing might succeed but validation should catch this
     // Adjust based on implementation
 }
