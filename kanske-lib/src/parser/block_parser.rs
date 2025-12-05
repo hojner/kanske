@@ -10,7 +10,6 @@ pub async fn parse_file(path: PathBuf) -> AppResult<Vec<Directive>> {
     };
     let text_for_parsing = config_file
         .lines()
-        .by_ref()
         .enumerate()
         .map(|(i, l)| (i + 1, l.trim()))
         .filter(|(_, l)| !l.starts_with("#") && !l.is_empty())
@@ -26,8 +25,7 @@ pub async fn parse_file(path: PathBuf) -> AppResult<Vec<Directive>> {
             "The number of { and } does not match".to_string(),
         ));
     }
-    let result = recursive_read(text_for_parsing, Vec::new());
-    result
+    recursive_read(text_for_parsing, Vec::new())
 }
 
 fn find_matching_brace(text: &BTreeMap<usize, &str>) -> AppResult<usize> {

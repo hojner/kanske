@@ -258,7 +258,7 @@ impl Alias {
         let s_trim = s.trim();
         if !s_trim.starts_with("$") || s_trim.is_empty() || s_trim == "$" {
             return Err(KanskeError::ParsedStringUnexpectedFormat(
-                "Wring format alias string".to_string(),
+                "Wrong format alias string".to_string(),
             ));
         } else {
             let alias = Arc::from(
@@ -291,20 +291,18 @@ impl Directive {
                 "Could not parse map for the first line into Directive".to_string(),
             )
         })?;
-        let name;
-        if params_str.starts_with("enable") || params_str.starts_with("disable") {
-            name = "enable";
-        // } else if params_str.starts_with("}") {
+        let name = if params_str.starts_with("enable") || params_str.starts_with("disable") {
+            "enable"
         } else {
-            (name, _) = params_str.split_once(" ").ok_or_else(|| {
+            params_str.split_whitespace().next().ok_or_else(|| {
             KanskeError::ParsedStringUnexpectedFormat(format!(
                 "Directive has the wrong format, should be <name> <parameters>. Config line: {}",
                 line_no
             ))
-        })?;
-        }
+            })?
+        };
         let params = Params::from_line(params_str.trim())?;
-        let params_len = params.count_some()?;
+        let params_len = params.count_some();
 
         Ok(Self {
             name: Arc::from(name),
