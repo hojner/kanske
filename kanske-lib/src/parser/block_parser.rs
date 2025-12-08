@@ -34,6 +34,8 @@ fn find_matching_brace(text: &BTreeMap<usize, &str>) -> AppResult<usize> {
         let open_count = l.matches("{").count();
         let close_count = l.matches("}").count();
 
+        dbg!(&open_count, &close_count);
+
         if open_count > 1 || close_count > 1 {
             return Err(KanskeError::ParsedStringUnexpectedFormat(
                 "Multiple { or } cannot be on the same line. ".to_string(),
@@ -61,6 +63,7 @@ fn recursive_read(
     mut text: BTreeMap<usize, &str>,
     mut dir_vec: Vec<Directive>,
 ) -> AppResult<Vec<Directive>> {
+    dbg!(&text);
     if text.is_empty() {
         return Ok(dir_vec);
     }

@@ -1,18 +1,13 @@
-use std::sync::Arc;
-use std::{path::PathBuf, str::FromStr};
+use std::path::PathBuf;
 
-use kanske_lib::parser::block_parser;
-use kanske_lib::{
-    AppResult, AppState,
-    parser::block_parser::{parse_file, types::Params},
-};
-use wayland_client::Connection;
+use kanske_lib::{AppResult, AppState, parser::block_parser::parse_file};
+// use wayland_client::Connection;
 
-struct OutputConfig {
-    profile: bool,
-    name: Arc<str>,
-    outputs: Arc<[Params]>,
-}
+// struct OutputConfig {
+//     profile: bool,
+//     name: Arc<str>,
+//     outputs: Arc<[Params]>,
+// }
 
 async fn config_parse() -> AppResult<()> {
     //     let test_config = "profile work-A {
@@ -22,7 +17,7 @@ async fn config_parse() -> AppResult<()> {
     // let test_str = /*DP-1 */"enable scale 1.0 mode 3440x1440@60.00Hz position 3,5";
     // println!("{:?}", test_str);
     let output = parse_file(PathBuf::from("./test.txt")).await?;
-    // dbg!(output);
+    dbg!(output);
     // for i in output.iter() {
     //     dbg!(i);
     // }
@@ -33,7 +28,7 @@ async fn config_parse() -> AppResult<()> {
 //     return Ok(state.heads.len());
 // }
 
-fn print_heads(state: &AppState) {
+fn _print_heads(state: &AppState) {
     println!("\n=== Monitors ===");
     println!("{}", state.heads.len());
     for (i, head) in state.heads.iter().enumerate() {
