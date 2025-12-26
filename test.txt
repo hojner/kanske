@@ -2,6 +2,11 @@
 
 # This is a comment
 
+profile "kanske lab" {
+     output eDP-1 enable
+}
+
+
 output DP-1 mode 1200x1400@60Hz enable position 0,0 { }{
      enable
      mode 1920x1200@60Hz
@@ -13,4 +18,5 @@ output DP-1 mode 1200x1400@60Hz enable position 0,0 { }{
           mode 1920x1200@60Hz
      }
 }
+
 output test

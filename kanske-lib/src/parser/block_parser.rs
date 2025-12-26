@@ -1,6 +1,9 @@
 pub mod types;
 
-use crate::{AppResult, KanskeError, parser::block_parser::types::Directive};
+use crate::{
+    AppResult, KanskeError,
+    parser::block_parser::types::{Directive, Lexer, Parser},
+};
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
 pub async fn parse_file(path: PathBuf) -> AppResult<Vec<Directive>> {
@@ -8,24 +11,35 @@ pub async fn parse_file(path: PathBuf) -> AppResult<Vec<Directive>> {
         Ok(s) => s,
         Err(e) => return Err(KanskeError::ReadIOError(e)),
     };
-    let text_for_parsing = config_file
-        .lines()
-        .enumerate()
-        .map(|(i, l)| (i + 1, l.trim()))
-        .filter(|(_, l)| !l.starts_with("#") && !l.is_empty())
-        .collect::<BTreeMap<usize, &str>>();
-    let (open, close) = text_for_parsing.values().fold((0, 0), |(open, close), s| {
-        (
-            open + s.matches('{').count(),
-            close + s.matches('}').count(),
-        )
-    });
-    if open != close {
-        return Err(KanskeError::ParsedStringUnexpectedFormat(
-            "The number of { and } does not match".to_string(),
-        ));
-    }
-    recursive_read(text_for_parsing, Vec::new())
+
+    let mut lexer = Lexer::new(config_file);
+    let tokens = lexer.tokenizer()?;
+
+    let mut ast = Parser::new(tokens);
+    ast.parse()?;
+
+    // dbg!(&tokens);
+
+    todo!()
+
+    // let text_for_parsing = config_file
+    //     .lines()
+    //     .enumerate()
+    //     .map(|(i, l)| (i + 1, l.trim()))
+    //     .filter(|(_, l)| !l.starts_with("#") && !l.is_empty())
+    //     .collect::<BTreeMap<usize, &str>>();
+    // let (open, close) = text_for_parsing.values().fold((0, 0), |(open, close), s| {
+    //     (
+    //         open + s.matches('{').count(),
+    //         close + s.matches('}').count(),
+    //     )
+    // });
+    // if open != close {
+    //     return Err(KanskeError::ParsedStringUnexpectedFormat(
+    //         "The number of { and } does not match".to_string(),
+    //     ));
+    // }
+    // recursive_read(text_for_parsing, Vec::new())
 }
 
 fn find_matching_brace(text: &BTreeMap<usize, &str>) -> AppResult<usize> {
