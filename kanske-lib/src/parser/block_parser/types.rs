@@ -1,3 +1,4 @@
+use std::mem::discriminant;
 use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{AppResult, KanskeError};
@@ -15,6 +16,7 @@ pub struct Config {
 pub enum ConfigItem {
     Profile(Profile),
     Include(IncludeDirective),
+    Output(OutputConfig),
 }
 
 #[derive(Debug, Clone)]
@@ -24,17 +26,26 @@ pub struct Profile {
     pub execs: Vec<ExecDirective>,
 }
 
-#[derive(Debug, Clone)]
-pub struct OutputConfig {
-    pub criteria: OutputCriteria,
-    pub commands: Vec<OutputCommand>,
+impl Profile {
+    fn new(s: String) -> Self {
+        Self {
+            name: Some(s),
+            outputs: Vec::new(),
+            execs: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
-pub enum OutputCriteria {
+pub enum OutputDesc {
     Name(String),
-    Description(String),
-    Any, // "*"
+    Any,
+}
+
+#[derive(Debug, Clone)]
+pub struct OutputConfig {
+    pub desc: OutputDesc,
+    pub commands: Vec<OutputCommand>,
 }
 
 #[derive(Debug, Clone)]
@@ -44,7 +55,7 @@ pub enum OutputCommand {
     Mode {
         width: u32,
         height: u32,
-        refresh: Option<f32>,
+        frequency: Option<f32>,
     },
     Position {
         x: i32,
@@ -327,82 +338,224 @@ impl Parser {
                 || self.tokens.first().expect("first item must exist") == &Token::Eof
         );
         assert!(self.tokens.last().expect("last item must exist") == &Token::Eof);
-        // --------------
-        // --------------
+        let mut config = Config { items: Vec::new() };
+        let mut config_item;
 
-        while !self.is_at_end() {
-            match self.tokens[self.current] {
+        loop {
+            config_item = match &self.tokens[self.current] {
                 Token::Profile => self.parse_profile()?,
-                Token::Include => self.parse_include()?,
-                Token::Output => self.parse_output()?,
-                _ => {
-                    return Err(KanskeError::ParsedStringUnexpectedFormat(
-                        "Unexpected token".to_string(),
-                    ));
+                // Token::Include => ConfigItem::Include(self.parse_include()),
+                Token::Output => ConfigItem::Output(self.parse_output()?),
+                Token::Eof => break,
+                other => {
+                    return Err(KanskeError::ParsedStringUnexpectedFormat(format!(
+                        "Unexpected 352 token: {:?}",
+                        other
+                    )));
                 }
             };
-
+            config.items.push(config_item);
             self.advance();
         }
 
-        todo!()
+        Ok(config)
     }
 
     fn parse_profile(&mut self) -> AppResult<ConfigItem> {
-        // ----------------
-        // For now profile must have name,
-        // will handle name generation for anonymous profiles later
-        // ----------------
+        assert!(self.check(&Token::Profile));
         self.advance();
 
+        let mut profile;
         if let Token::String(s) = &self.tokens[self.current] {
-            let profile = Profile {
-                name: Some(s.to_owned()),
-                outputs: Vec::new(),
-                execs: Vec::new(),
-            };
+            // For now profile must have name,
+            // will handle name generation for anonymous profiles later
+            profile = Profile::new(s.clone());
+            self.advance();
         } else {
             return Err(KanskeError::ParsedStringUnexpectedFormat(
                 "Profile has no name".to_string(),
             ));
         }
 
+        assert!(self.check(&Token::LeftBrace));
         self.advance();
-        assert!(&self.tokens[self.current] == &Token::LeftBrace);
 
-        todo!();
+        while !self.is_at_end() {
+            match &self.tokens[self.current] {
+                Token::Output => {
+                    profile.outputs.push(self.parse_output()?);
+                    println!("Output result: {:?}", profile);
+                }
+                Token::Exec => todo!(),
+                Token::RightBrace => {
+                    self.advance();
+                    break;
+                }
+                other => {
+                    return Err(KanskeError::ParsedStringUnexpectedFormat(format!(
+                        "Unexpected token: {:?}",
+                        other
+                    )));
+                }
+            };
+        }
+        Ok(ConfigItem::Profile(profile))
+    }
+
+    fn parse_output(&mut self) -> AppResult<OutputConfig> {
+        assert!(self.check(&Token::Output));
+        self.advance();
+        let desc = if let Token::Identifier(desc) = &self.tokens[self.current] {
+            OutputDesc::Name(desc.clone())
+        } else {
+            return Err(KanskeError::ParsedStringUnexpectedFormat(
+                "Unexpected output name format".to_string(),
+            ));
+        };
+        self.advance();
+        assert!(self.check(&Token::LeftBrace));
+        self.advance();
+
+        //
+        //
+        // ---
+        // -----
+        // This is where we have to add the ability to handle both sub-grouping with braces,
+        // or don't
+        // -----
+        // ---
+        //
+        //
+
+        let mut commands = Vec::new();
+        while !self.is_at_end() {
+            dbg!(&self.tokens[self.current]);
+            let output_config = match self.tokens[self.current] {
+                Token::Enable | Token::Disable => self.parse_able()?,
+                Token::Mode => self.parse_mode()?,
+                Token::Position => self.parse_position()?,
+                Token::RightBrace => break,
+                _ => {
+                    return Err(KanskeError::ParsedStringUnexpectedFormat(
+                        "Unexpected output config format".to_string(),
+                    ));
+                }
+            };
+            commands.push(output_config);
+            dbg!(&commands);
+            self.advance();
+        }
+        Ok(OutputConfig { desc, commands })
     }
 
     fn parse_include(&mut self) -> AppResult<ConfigItem> {
         todo!();
     }
 
-    fn parse_output(&mut self) -> AppResult<ConfigItem> {
-        todo!();
+    fn parse_able(&self) -> AppResult<OutputCommand> {
+        assert!(self.check(&Token::Enable) || self.check(&Token::Disable));
+        if self.check(&Token::Enable) {
+            return Ok(OutputCommand::Enable);
+        } else if self.check(&Token::Disable) {
+            return Ok(OutputCommand::Disable);
+        }
+        Err(KanskeError::ParsedStringUnexpectedFormat(
+            "Cannot parse Enable/Disable".to_string(),
+        ))
     }
 
-    fn parse_braces(&mut self) -> AppResult<usize> {
-        let mut left_brace_count = 1;
-        let mut right_brace_count = 0;
+    fn parse_mode(&mut self) -> AppResult<OutputCommand> {
+        assert!(self.check(&Token::Mode));
+        self.advance();
+        dbg!(&self.tokens[self.current]);
 
-        let start = self.current;
-        let token = &self.tokens[start];
-        assert!(token == &Token::LeftBrace);
-
-        while left_brace_count > right_brace_count {
-            if self.is_at_end() {
+        let (width, height, frequency) =
+            if let Token::Identifier(mode_str) = &self.tokens[self.current] {
+                self.parse_mode_str(mode_str)?
+            } else {
                 return Err(KanskeError::ParsedStringUnexpectedFormat(
-                    "Braces not matching".to_string(),
+                    "Unexpected format".to_string(),
                 ));
-            }
-            self.advance();
-            match &self.tokens[self.current] {
-                Token::LeftBrace => left_brace_count += 1,
-                Token::RightBrace => right_brace_count += 1,
-                _ => continue,
-            }
+            };
+
+        Ok(OutputCommand::Mode {
+            width,
+            height,
+            frequency,
+        })
+    }
+
+    fn parse_mode_str(&self, s: &str) -> AppResult<(u32, u32, Option<f32>)> {
+        let parts: Vec<_> = s.split("@").collect();
+        let resolution = parts[0];
+        let res_parts: Vec<_> = resolution.split("x").collect();
+
+        if res_parts.len() != 2 {
+            return Err(KanskeError::ParsedStringUnexpectedFormat(
+                "Wrong resolution format, use <width in pixels>X<height in pixels>".to_string(),
+            ));
         }
-        todo!()
+
+        let frequency = if parts.len() > 1 {
+            let freq_str = parts[1].trim().trim_end_matches("Hz");
+            Some(freq_str.parse::<f32>().map_err(|_| {
+                KanskeError::ParsedStringUnexpectedFormat("Invalid frequency format".to_string())
+            })?)
+        } else {
+            None
+        };
+
+        let width = res_parts[0].trim().parse::<u32>().map_err(|_| {
+            KanskeError::ParsedStringUnexpectedFormat("Wrong resolution width format".to_string())
+        })?;
+        let height = res_parts[0].trim().parse::<u32>().map_err(|_| {
+            KanskeError::ParsedStringUnexpectedFormat("Wrong resolution height format".to_string())
+        })?;
+
+        Ok((width, height, frequency))
+    }
+
+    fn parse_position(&mut self) -> AppResult<OutputCommand> {
+        assert!(self.check(&Token::Position));
+        self.advance();
+
+        let (x, y) = if let Token::Identifier(position_str) = &self.tokens[self.current] {
+            self.parse_position_str(position_str)?
+        } else {
+            return Err(KanskeError::ParsedStringUnexpectedFormat(
+                "Unexpected format".to_string(),
+            ));
+        };
+
+        Ok(OutputCommand::Position { x: 3, y: 5 })
+    }
+
+    fn parse_position_str(&self, s: &str) -> AppResult<(u32, u32)> {
+        let parts: Vec<_> = s.split(",").collect();
+
+        if parts.len() != 2 {
+            return Err(KanskeError::ParsedStringUnexpectedFormat(
+                "Position parts must be separated by a comma".to_string(),
+            ));
+        }
+
+        let x = parts[0].trim().parse::<u32>().map_err(|_| {
+            KanskeError::ParsedStringUnexpectedFormat(
+                "Cannot parse X value in position".to_string(),
+            )
+        })?;
+
+        let y = parts[1].trim().parse::<u32>().map_err(|_| {
+            KanskeError::ParsedStringUnexpectedFormat(
+                "Cannot parse Y value in position".to_string(),
+            )
+        })?;
+
+        Ok((x, y))
+    }
+
+    fn check(&self, token: &Token) -> bool {
+        discriminant(&self.tokens[self.current]) == discriminant(token)
     }
 
     fn peek(&self) -> Token {
@@ -413,7 +566,7 @@ impl Parser {
         if self.current >= self.tokens.len() {
             return true;
         }
-        return false;
+        false
     }
 
     fn advance(&mut self) {
