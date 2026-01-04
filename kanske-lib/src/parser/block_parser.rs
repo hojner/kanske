@@ -21,25 +21,6 @@ pub async fn parse_file(path: PathBuf) -> AppResult<Vec<Directive>> {
     // dbg!(&tokens);
 
     todo!()
-
-    // let text_for_parsing = config_file
-    //     .lines()
-    //     .enumerate()
-    //     .map(|(i, l)| (i + 1, l.trim()))
-    //     .filter(|(_, l)| !l.starts_with("#") && !l.is_empty())
-    //     .collect::<BTreeMap<usize, &str>>();
-    // let (open, close) = text_for_parsing.values().fold((0, 0), |(open, close), s| {
-    //     (
-    //         open + s.matches('{').count(),
-    //         close + s.matches('}').count(),
-    //     )
-    // });
-    // if open != close {
-    //     return Err(KanskeError::ParsedStringUnexpectedFormat(
-    //         "The number of { and } does not match".to_string(),
-    //     ));
-    // }
-    // recursive_read(text_for_parsing, Vec::new())
 }
 
 fn find_matching_brace(text: &BTreeMap<usize, &str>) -> AppResult<usize> {
@@ -71,43 +52,4 @@ fn find_matching_brace(text: &BTreeMap<usize, &str>) -> AppResult<usize> {
     Err(KanskeError::ParsedStringUnexpectedFormat(
         "Curly braces not matching in config".to_string(),
     ))
-}
-
-fn recursive_read(
-    mut text: BTreeMap<usize, &str>,
-    mut dir_vec: Vec<Directive>,
-) -> AppResult<Vec<Directive>> {
-    dbg!(&text);
-    if text.is_empty() {
-        return Ok(dir_vec);
-    }
-
-    if text.len() == 1 {
-        let directive = Directive::from_line(text)?;
-        dir_vec.push(directive);
-        return Ok(dir_vec);
-    }
-
-    let (line_no, first_line) = text
-        .pop_first()
-        .ok_or_else(|| KanskeError::ParsedStringIsEmpty)?;
-    let mut first_entry = BTreeMap::new();
-    first_entry.insert(line_no, first_line);
-
-    if first_line.contains("{") {
-        let key = find_matching_brace(&text)?;
-        let mut directive = Directive::from_line(first_entry)?;
-        let mut tail = text.split_off(&key);
-        tail.pop_first();
-
-        let child = recursive_read(text, Vec::new())?;
-        directive.children = Some(Box::new(child));
-        dir_vec.push(directive);
-
-        recursive_read(tail, dir_vec)
-    } else {
-        let directive = Directive::from_line(first_entry)?;
-        dir_vec.push(directive);
-        recursive_read(text, dir_vec)
-    }
 }

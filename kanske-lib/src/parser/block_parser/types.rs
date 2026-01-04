@@ -341,7 +341,7 @@ impl Parser {
         let mut config = Config { items: Vec::new() };
         let mut config_item;
 
-        loop {
+        while !self.is_at_end() {
             config_item = match &self.tokens[self.current] {
                 Token::Profile => self.parse_profile()?,
                 // Token::Include => ConfigItem::Include(self.parse_include()),
@@ -357,6 +357,8 @@ impl Parser {
             config.items.push(config_item);
             self.advance();
         }
+
+        dbg!(&config);
 
         Ok(config)
     }
@@ -413,43 +415,65 @@ impl Parser {
             ));
         };
         self.advance();
-        assert!(self.check(&Token::LeftBrace));
-        self.advance();
-
-        //
-        //
-        // ---
-        // -----
-        // This is where we have to add the ability to handle both sub-grouping with braces,
-        // or don't
-        // -----
-        // ---
-        //
-        //
 
         let mut commands = Vec::new();
-        while !self.is_at_end() {
-            dbg!(&self.tokens[self.current]);
-            let output_config = match self.tokens[self.current] {
-                Token::Enable | Token::Disable => self.parse_able()?,
-                Token::Mode => self.parse_mode()?,
-                Token::Position => self.parse_position()?,
-                Token::RightBrace => break,
-                _ => {
+        loop {
+            match &self.tokens[self.current] {
+                Token::LeftBrace => {
+                    dbg!(&self.tokens[self.current]);
+                    self.advance();
+                    dbg!(&self.tokens[self.current]);
+                    while !self.is_at_end() && !self.check(&Token::RightBrace) {
+                        commands.push(self.parse_output_command()?);
+                        self.advance();
+                    }
+                    break;
+                }
+                Token::Eof | Token::Exec | Token::Include | Token::Output | Token::Profile => {
+                    break;
+                }
+                Token::RightBrace => {
                     return Err(KanskeError::ParsedStringUnexpectedFormat(
-                        "Unexpected output config format".to_string(),
+                        "Found right brace before left brace".to_string(),
                     ));
                 }
+                Token::Enable
+                | Token::Disable
+                | Token::Mode
+                | Token::Position
+                | Token::Scale
+                | Token::Transform
+                | Token::AdaptiveSync => {
+                    commands.push(self.parse_output_command()?);
+                    self.advance();
+                }
+                _ => {
+                    return Err(KanskeError::ParsedStringUnexpectedFormat(format!(
+                        "Unexpected token found: {:?}",
+                        &self.tokens[self.current]
+                    )));
+                }
             };
-            commands.push(output_config);
-            dbg!(&commands);
-            self.advance();
         }
+
         Ok(OutputConfig { desc, commands })
     }
 
-    fn parse_include(&mut self) -> AppResult<ConfigItem> {
-        todo!();
+    fn parse_output_command(&mut self) -> AppResult<OutputCommand> {
+        match &self.tokens[self.current] {
+            Token::Enable | Token::Disable => self.parse_able(),
+            Token::Mode => self.parse_mode(),
+            Token::Position => self.parse_position(),
+            Token::Scale => self.parse_scale(),
+            Token::Transform => self.parse_transform(),
+            Token::AdaptiveSync => self.parse_adaptive_sync(),
+            other => {
+                return Err(KanskeError::ParsedStringUnexpectedFormat(format!(
+                    "Unexpected output config format, found token: {:?}",
+                    other
+                )));
+            }
+        }
     }
 
     fn parse_able(&self) -> AppResult<OutputCommand> {
@@ -508,7 +532,7 @@ impl Parser {
         let width = res_parts[0].trim().parse::<u32>().map_err(|_| {
             KanskeError::ParsedStringUnexpectedFormat("Wrong resolution width format".to_string())
         })?;
-        let height = res_parts[0].trim().parse::<u32>().map_err(|_| {
+        let height = res_parts[1].trim().parse::<u32>().map_err(|_| {
             KanskeError::ParsedStringUnexpectedFormat("Wrong resolution height format".to_string())
         })?;
 
@@ -527,10 +551,10 @@ impl Parser {
             ));
         };
 
-        Ok(OutputCommand::Position { x: 3, y: 5 })
+        Ok(OutputCommand::Position { x, y })
     }
 
-    fn parse_position_str(&self, s: &str) -> AppResult<(u32, u32)> {
+    fn parse_position_str(&self, s: &str) -> AppResult<(i32, i32)> {
         let parts: Vec<_> = s.split(",").collect();
 
         if parts.len() != 2 {
@@ -539,13 +563,13 @@ impl Parser {
             ));
         }
 
-        let x = parts[0].trim().parse::<u32>().map_err(|_| {
+        let x = parts[0].trim().parse::<i32>().map_err(|_| {
             KanskeError::ParsedStringUnexpectedFormat(
                 "Cannot parse X value in position".to_string(),
             )
         })?;
 
-        let y = parts[1].trim().parse::<u32>().map_err(|_| {
+        let y = parts[1].trim().parse::<i32>().map_err(|_| {
             KanskeError::ParsedStringUnexpectedFormat(
                 "Cannot parse Y value in position".to_string(),
             )
@@ -554,13 +578,92 @@ impl Parser {
         Ok((x, y))
     }
 
+    fn parse_scale(&mut self) -> AppResult<OutputCommand> {
+        assert!(self.check(&Token::Scale));
+        self.advance();
+
+        let s = if let Token::Number(scale_str) = &self.tokens[self.current] {
+            *scale_str
+        } else {
+            return Err(KanskeError::ParsedStringUnexpectedFormat(
+                "Unexpected format".to_string(),
+            ));
+        };
+
+        Ok(OutputCommand::Scale(s))
+    }
+
+    fn parse_transform(&mut self) -> AppResult<OutputCommand> {
+        assert!(self.check(&Token::Transform));
+        self.advance();
+
+        let transform = match &self.tokens[self.current] {
+            Token::Number(n) => match *n as i32 {
+                90 => Transform::Rotate90,
+                180 => Transform::Rotate180,
+                270 => Transform::Rotate270,
+                _ => {
+                    return Err(KanskeError::ParsedStringUnexpectedFormat(format!(
+                        "Invalid transform type: {}",
+                        n
+                    )));
+                }
+            },
+            Token::Identifier(s) => match s.as_str() {
+                "normal" => Transform::Normal,
+                "flipped" => Transform::Flipped,
+                "flipped-90" => Transform::Flipped90,
+                "flipped-180" => Transform::Flipped180,
+                "flipped-270" => Transform::Flipped270,
+                _ => {
+                    return Err(KanskeError::ParsedStringUnexpectedFormat(format!(
+                        "Invalid transform type: {}",
+                        s
+                    )));
+                }
+            },
+            other => {
+                return Err(KanskeError::ParsedStringUnexpectedFormat(format!(
+                    "Unexpected token: {:?}",
+                    other
+                )));
+            }
+        };
+
+        Ok(OutputCommand::Transform(transform))
+    }
+
+    fn parse_adaptive_sync(&mut self) -> AppResult<OutputCommand> {
+        assert!(self.check(&Token::AdaptiveSync));
+        self.advance();
+
+        let adaptive_sync = if let Token::Identifier(a) = &self.tokens[self.current] {
+            match a.as_str() {
+                "on" => OutputCommand::AdaptiveSync(true),
+                "off" => OutputCommand::AdaptiveSync(false),
+                _ => {
+                    return Err(KanskeError::ParsedStringUnexpectedFormat(format!(
+                        "Cannot parse the adaptive sync setting: {}",
+                        a
+                    )));
+                }
+            }
+        } else {
+            return Err(KanskeError::ParsedStringUnexpectedFormat(
+                "Cannot parse the adaptive sync setting".to_string(),
+            ));
+        };
+
+        Ok(adaptive_sync)
+    }
+
     fn check(&self, token: &Token) -> bool {
         discriminant(&self.tokens[self.current]) == discriminant(token)
     }
 
-    fn peek(&self) -> Token {
-        self.tokens[self.current + 1].clone()
-    }
+    // fn peek(&self) -> Token {
+    //     self.tokens[self.current + 1].clone()
+    // }
 
     fn is_at_end(&self) -> bool {
         if self.current >= self.tokens.len() {
