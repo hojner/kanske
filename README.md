@@ -2,7 +2,7 @@
 
 ## The name
 
-The name "kanske" is Swedish for maybe. Which, at the time of naming, was a
+The name "kanske" is Swedish for "maybe". Which, at the time of naming, was a
 rough estimate of the probability that project would reach Prod status. The word
 is also pretty similar to Kanshi, tha app I'm trying to rewrite.
 

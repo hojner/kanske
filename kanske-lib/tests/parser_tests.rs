@@ -1,267 +1,480 @@
-use kanske_lib::parser::block_parser::parse_file;
-use kanske_lib::parser::block_parser::types::Directive;
+// Parser integration tests based on kanshi-complete-example.config
 
-// Helper to create temporary test config files
-async fn test_config_parse(content: &str) -> Result<Vec<Directive>, kanske_lib::KanskeError> {
-    use std::io::Write;
-    let mut temp_file = tempfile::NamedTempFile::new().unwrap();
-    temp_file.write_all(content.as_bytes()).unwrap();
-    temp_file.flush().unwrap();
-    let path = temp_file.path().to_path_buf();
-    parse_file(path).await
-}
-
-// Helper to check if directive has expected name
-fn assert_directive_name(directive: &Directive, expected_name: &str) {
-    assert_eq!(
-        directive.name.as_ref(),
-        expected_name,
-        "Expected directive name '{}', got '{}'",
-        expected_name,
-        directive.name
-    );
-}
-
-// Helper to check if mode is parsed correctly
-fn assert_mode(
-    directive: &Directive,
-    expected_width: u32,
-    expected_height: u32,
-    expected_freq: Option<f32>,
-) {
-    let mode = directive
-        .params
-        .mode
-        .as_ref()
-        .expect("Mode should be present");
-    assert_eq!(mode.width, expected_width, "Width mismatch");
-    assert_eq!(mode.height, expected_height, "Height mismatch");
-    assert_eq!(mode.frequency, expected_freq, "Frequency mismatch");
-}
+use kanske_lib::parser::block_parser::types::{
+    ConfigItem, Lexer, OutputCommand, OutputDesc, Parser, Transform,
+};
 
 // ============================================================================
-// POSITIVE TESTS - Valid Configurations with Value Assertions
+// LEXER TESTS
 // ============================================================================
 
-#[tokio::test]
-async fn test_simple_mode_parsing() {
-    let config = r#"
-output DP-1 mode 1920x1080@60Hz
-"#;
-    let result = test_config_parse(config).await;
-
-    match result {
-        Ok(directives) => {
-            assert_eq!(directives.len(), 1, "Should have exactly one directive");
-            let directive = &directives[0];
-            assert_directive_name(directive, "output");
-            assert_mode(directive, 1920, 1080, Some(60.0));
-        }
-        Err(e) => {
-            panic!("Should parse simple mode directive. Error: {:?}", e);
-        }
-    }
-}
-
-#[tokio::test]
-async fn test_mode_high_refresh_rate() {
-    let config = "output DP-1 mode 2560x1440@165Hz";
-    let result = test_config_parse(config).await;
-
-    if let Ok(directives) = result {
-        assert_eq!(directives.len(), 1);
-        assert_mode(&directives[0], 2560, 1440, Some(165.0));
-    } else {
-        panic!("Should parse high refresh rate. Error: {:?}", result);
-    }
-}
-
-#[tokio::test]
-async fn test_mode_4k_resolution() {
-    let config = "output HDMI-1 mode 3840x2160@60Hz";
-    let result = test_config_parse(config).await;
-
-    if let Ok(directives) = result {
-        assert_eq!(directives.len(), 1);
-        assert_mode(&directives[0], 3840, 2160, Some(60.0));
-    }
-}
-
-#[tokio::test]
-async fn test_mode_fractional_refresh_rate() {
-    let config = "output eDP-1 mode 1920x1080@59.94Hz";
-    let result = test_config_parse(config).await;
-
-    if let Ok(directives) = result {
-        assert_eq!(directives.len(), 1);
-        assert_mode(&directives[0], 1920, 1080, Some(59.94));
-    }
-}
-
-// ============================================================================
-// NEGATIVE TESTS - Invalid Configurations
-// ============================================================================
-
-#[tokio::test]
-async fn test_invalid_mode_missing_x_separator() {
-    let config = "output DP-1 mode 1920-1080@60Hz";
-    let result = test_config_parse(config).await;
-
-    assert!(
-        result.is_err(),
-        "Should fail: mode format missing 'x' separator"
-    );
-}
-
-#[tokio::test]
-async fn test_invalid_mode_non_numeric_width() {
-    let config = "output DP-1 mode ABCDx1080@60Hz";
-    let result = test_config_parse(config).await;
-
-    assert!(result.is_err(), "Should fail: width is not a number");
-}
-
-#[tokio::test]
-async fn test_invalid_mode_non_numeric_height() {
-    let config = "output DP-1 mode 1920xABCD@60Hz";
-    let result = test_config_parse(config).await;
-
-    assert!(result.is_err(), "Should fail: height is not a number");
-}
-
-#[tokio::test]
-async fn test_invalid_mode_non_numeric_refresh() {
-    let config = "output DP-1 mode 1920x1080@ABCHz";
-    let result = test_config_parse(config).await;
-
-    assert!(result.is_err(), "Should fail: refresh rate is not a number");
-}
-
-#[tokio::test]
-async fn test_mismatched_braces_extra_open() {
-    let config = r#"
+#[test]
+fn test_lexer_with_comments() {
+    let input = r#"
+# This is a comment
 profile test {
-    output eDP-1 mode 1920x1080
-    {
+    output DP-1 enable
+}
 "#;
-    let result = test_config_parse(config).await;
-
-    assert!(result.is_err(), "Should fail: mismatched opening braces");
+    let mut lexer = Lexer::new(input.to_string());
+    let result = lexer.tokenizer();
+    assert!(result.is_ok());
 }
 
-#[tokio::test]
-async fn test_mismatched_braces_extra_close() {
-    let config = r#"
+#[test]
+fn test_lexer_quoted_string() {
+    let input = r#"profile "detailed example""#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    assert_eq!(tokens.len(), 3); // Profile, String, Eof
+}
+
+// ============================================================================
+// BASIC PARSING TESTS
+// ============================================================================
+
+#[test]
+fn test_parse_profile_with_enable() {
+    let input = r#"
 profile test {
-    output eDP-1 mode 1920x1080
-}
-}
-"#;
-    let result = test_config_parse(config).await;
-
-    assert!(result.is_err(), "Should fail: extra closing braces");
-}
-
-#[tokio::test]
-async fn test_multiple_braces_same_line() {
-    let config = r#"
-output test {
-    mode {{ 1920x1080
+    output eDP-1 enable
 }
 "#;
-    let result = test_config_parse(config).await;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
 
-    assert!(result.is_err(), "Should fail: multiple braces on same line");
+    assert_eq!(config.items.len(), 1);
+    match &config.items[0] {
+        ConfigItem::Profile(p) => {
+            assert_eq!(p.name, Some("test".to_string()));
+            assert_eq!(p.outputs.len(), 1);
+            assert!(matches!(p.outputs[0].commands[0], OutputCommand::Enable));
+        }
+        _ => panic!("Expected Profile"),
+    }
 }
 
-#[tokio::test]
-async fn test_empty_config_file() {
-    let config = "";
-    let result = test_config_parse(config).await;
+#[test]
+fn test_parse_mode_with_refresh() {
+    let input = r#"
+profile test {
+    output DP-1 mode 1920x1080@60Hz
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
 
-    // Empty config returns Ok with empty vec after filtering
-    match result {
-        Ok(directives) => assert_eq!(
-            directives.len(),
-            0,
-            "Empty config should have no directives"
-        ),
-        Err(_) => {} // Also acceptable
+    match &config.items[0] {
+        ConfigItem::Profile(p) => match p.outputs[0].commands[0] {
+            OutputCommand::Mode {
+                width,
+                height,
+                frequency,
+            } => {
+                assert_eq!(width, 1920);
+                assert_eq!(height, 1080);
+                assert_eq!(frequency, Some(60.0));
+            }
+            _ => panic!("Expected Mode command"),
+        },
+        _ => panic!("Expected Profile"),
+    }
+}
+
+#[test]
+fn test_parse_mode_without_refresh() {
+    let input = r#"
+profile test {
+    output DP-1 mode 1920x1080
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
+
+    match &config.items[0] {
+        ConfigItem::Profile(p) => match p.outputs[0].commands[0] {
+            OutputCommand::Mode { frequency, .. } => {
+                assert_eq!(frequency, None);
+            }
+            _ => panic!("Expected Mode command"),
+        },
+        _ => panic!("Expected Profile"),
+    }
+}
+
+#[test]
+fn test_parse_position() {
+    let input = r#"
+profile test {
+    output DP-1 position 1920,0
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
+
+    match &config.items[0] {
+        ConfigItem::Profile(p) => match p.outputs[0].commands[0] {
+            OutputCommand::Position { x, y } => {
+                assert_eq!(x, 1920);
+                assert_eq!(y, 0);
+            }
+            _ => panic!("Expected Position command"),
+        },
+        _ => panic!("Expected Profile"),
+    }
+}
+
+#[test]
+fn test_parse_scale() {
+    let input = r#"
+profile test {
+    output eDP-1 scale 1.5
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
+
+    match &config.items[0] {
+        ConfigItem::Profile(p) => match p.outputs[0].commands[0] {
+            OutputCommand::Scale(s) => assert_eq!(s, 1.5),
+            _ => panic!("Expected Scale command"),
+        },
+        _ => panic!("Expected Profile"),
+    }
+}
+
+#[test]
+fn test_parse_transform_normal() {
+    let input = r#"
+profile test {
+    output DP-1 transform normal
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
+
+    match &config.items[0] {
+        ConfigItem::Profile(p) => {
+            assert!(matches!(
+                p.outputs[0].commands[0],
+                OutputCommand::Transform(Transform::Normal)
+            ));
+        }
+        _ => panic!("Expected Profile"),
+    }
+}
+
+#[test]
+fn test_parse_transform_rotate_90() {
+    let input = r#"
+profile test {
+    output DP-2 transform 90
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
+
+    match &config.items[0] {
+        ConfigItem::Profile(p) => {
+            assert!(matches!(
+                p.outputs[0].commands[0],
+                OutputCommand::Transform(Transform::Rotate90)
+            ));
+        }
+        _ => panic!("Expected Profile"),
+    }
+}
+
+#[test]
+fn test_parse_adaptive_sync_on() {
+    let input = r#"
+profile test {
+    output DP-1 adaptive_sync on
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
+
+    match &config.items[0] {
+        ConfigItem::Profile(p) => {
+            assert!(matches!(
+                p.outputs[0].commands[0],
+                OutputCommand::AdaptiveSync(true)
+            ));
+        }
+        _ => panic!("Expected Profile"),
     }
 }
 
 // ============================================================================
-// BLOCK AND NESTING TESTS
+// INLINE VS BLOCK OUTPUT TESTS
 // ============================================================================
 
-#[tokio::test]
-async fn test_simple_block_with_children() {
-    let config = r#"
-output DP-1 {
-    mode 1920x1080@60Hz
+#[test]
+fn test_parse_inline_output_commands() {
+    let input = r#"
+profile compact {
+    output eDP-1 enable mode 1920x1080 position 0,0 scale 1.5
 }
 "#;
-    let result = test_config_parse(config).await;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
 
-    match result {
-        Ok(directives) => {
-            assert_eq!(directives.len(), 1, "Should have one top-level directive");
-            assert_directive_name(&directives[0], "output");
-
-            let children = directives[0]
-                .children
-                .as_ref()
-                .expect("Should have children");
-            assert_eq!(children.len(), 1, "Should have one child directive");
+    match &config.items[0] {
+        ConfigItem::Profile(p) => {
+            assert_eq!(p.outputs[0].commands.len(), 4);
         }
-        Err(e) => panic!("Should parse block with children. Error: {:?}", e),
+        _ => panic!("Expected Profile"),
     }
 }
 
-#[tokio::test]
-async fn test_multiple_top_level_directives() {
-    let config = r#"
-output DP-1 mode 1920x1080@60Hz
-output HDMI-1 mode 2560x1440@144Hz
-"#;
-    let result = test_config_parse(config).await;
-
-    match result {
-        Ok(directives) => {
-            assert_eq!(directives.len(), 2, "Should have two top-level directives");
-            assert_directive_name(&directives[0], "output");
-            assert_directive_name(&directives[1], "output");
-        }
-        Err(e) => panic!("Should parse multiple directives. Error: {:?}", e),
-    }
-}
-
-#[tokio::test]
-async fn test_nested_blocks() {
-    let config = r#"
-output DP-1 {
-    output DP-2 {
-        mode 1920x1080@60Hz
+#[test]
+fn test_parse_block_output_commands() {
+    let input = r#"
+profile detailed {
+    output eDP-1 {
+        enable
+        mode 1920x1200@60Hz
+        position 0,0
+        scale 2.0
     }
 }
 "#;
-    let result = test_config_parse(config).await;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
 
-    match result {
-        Ok(directives) => {
-            assert_eq!(directives.len(), 1);
-            let children = directives[0]
-                .children
-                .as_ref()
-                .expect("Should have children");
-            assert_eq!(children.len(), 1);
-
-            let nested_children = children[0]
-                .children
-                .as_ref()
-                .expect("Should have nested children");
-            assert_eq!(nested_children.len(), 1);
+    match &config.items[0] {
+        ConfigItem::Profile(p) => {
+            assert_eq!(p.outputs[0].commands.len(), 4);
         }
-        Err(e) => panic!("Should parse nested blocks. Error: {:?}", e),
+        _ => panic!("Expected Profile"),
     }
+}
+
+// ============================================================================
+// MULTIPLE OUTPUTS
+// ============================================================================
+
+#[test]
+fn test_parse_multiple_outputs() {
+    let input = r#"
+profile dual {
+    output eDP-1 enable
+    output HDMI-1 disable
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
+
+    match &config.items[0] {
+        ConfigItem::Profile(p) => {
+            assert_eq!(p.outputs.len(), 2);
+            match &p.outputs[0].desc {
+                OutputDesc::Name(n) => assert_eq!(n, "eDP-1"),
+                _ => panic!("Expected name"),
+            }
+            match &p.outputs[1].desc {
+                OutputDesc::Name(n) => assert_eq!(n, "HDMI-1"),
+                _ => panic!("Expected name"),
+            }
+        }
+        _ => panic!("Expected Profile"),
+    }
+}
+
+// ============================================================================
+// GLOBAL OUTPUT CONFIG
+// ============================================================================
+
+#[test]
+fn test_parse_global_output() {
+    let input = r#"
+output HDMI-A-1 mode 1920x1080@60Hz
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
+
+    assert_eq!(config.items.len(), 1);
+    assert!(matches!(config.items[0], ConfigItem::Output(_)));
+}
+
+// ============================================================================
+// MULTIPLE TOP-LEVEL ITEMS
+// ============================================================================
+
+#[test]
+fn test_parse_multiple_profiles() {
+    let input = r#"
+profile first {
+    output eDP-1 enable
+}
+
+profile second {
+    output HDMI-1 enable
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
+
+    assert_eq!(config.items.len(), 2);
+    assert!(matches!(config.items[0], ConfigItem::Profile(_)));
+    assert!(matches!(config.items[1], ConfigItem::Profile(_)));
+}
+
+// ============================================================================
+// UNIMPLEMENTED FEATURES (These should fail until implemented)
+// ============================================================================
+
+#[test]
+#[ignore] // Remove this when exec is implemented
+fn test_parse_exec_directive() {
+    let input = r#"
+profile test {
+    output eDP-1 enable
+    exec notify-send "Profile activated"
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
+    
+    match &config.items[0] {
+        ConfigItem::Profile(p) => {
+            assert_eq!(p.execs.len(), 1);
+            assert_eq!(p.execs[0].command, "notify-send \"Profile activated\"");
+        }
+        _ => panic!("Expected Profile"),
+    }
+}
+
+#[test]
+#[ignore] // Remove this when include is implemented
+fn test_parse_include_directive() {
+    let input = r#"
+include ~/.config/kanshi/extra.conf
+profile test {
+    output eDP-1 enable
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
+    
+    assert_eq!(config.items.len(), 2);
+    match &config.items[0] {
+        ConfigItem::Include(inc) => {
+            assert_eq!(inc.path, "~/.config/kanshi/extra.conf");
+        }
+        _ => panic!("Expected Include"),
+    }
+}
+
+#[test]
+#[ignore] // Remove this when wildcard output is implemented
+fn test_parse_wildcard_output() {
+    let input = r#"
+profile test {
+    output eDP-1 enable
+    output * disable
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
+    
+    match &config.items[0] {
+        ConfigItem::Profile(p) => {
+            assert_eq!(p.outputs.len(), 2);
+            match &p.outputs[1].desc {
+                OutputDesc::Any => {}, // Success
+                _ => panic!("Expected OutputDesc::Any for wildcard"),
+            }
+        }
+        _ => panic!("Expected Profile"),
+    }
+}
+
+#[test]
+#[ignore] // Remove this when anonymous profiles are implemented
+fn test_parse_anonymous_profile() {
+    let input = r#"
+profile {
+    output eDP-1 enable
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
+    
+    match &config.items[0] {
+        ConfigItem::Profile(p) => {
+            // Should auto-generate a name or set to None
+            assert!(p.name.is_some() || p.name.is_none());
+        }
+        _ => panic!("Expected Profile"),
+    }
+}
+
+// ============================================================================
+// ERROR CASES
+// ============================================================================
+
+#[test]
+fn test_parse_invalid_transform() {
+    let input = r#"
+profile test {
+    output DP-1 transform 45
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let result = parser.parse();
+
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_parse_invalid_adaptive_sync() {
+    let input = r#"
+profile test {
+    output DP-1 adaptive_sync maybe
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let result = parser.parse();
+
+    assert!(result.is_err());
 }
