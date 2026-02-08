@@ -1,7 +1,7 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, process};
 
-use kanske_lib::{AppResult, AppState, parser::block_parser::parse_file};
-// use wayland_client::Connection;
+use kanske_lib::{AppResult, AppState, KanskeError, parser::config_parser::parse_file};
+use wayland_client::Connection;
 
 // struct OutputConfig {
 //     profile: bool,
@@ -60,29 +60,47 @@ fn _print_heads(state: &AppState) {
 }
 
 #[tokio::main]
-async fn main() -> AppResult<()> {
-    config_parse().await?;
-    // let conn = match Connection::connect_to_env() {
-    //     Ok(c) => c,
-    //     Err(e) => return Err(KanskeError::WaylandConnectError(e)),
-    // };
-    // let display = conn.display();
-    // let mut event_queue = conn.new_event_queue();
-    // let qh = event_queue.handle();
+async fn main() {
+    if let Err(e) = run().await {
+        eprintln!("Error: {}", e);
+        process::exit(1);
+    }
+}
 
-    // let _registry = display.get_registry(&qh, ());
+async fn run() -> AppResult<()> {
+    if let Err(e) = config_parse().await {
+        eprintln!("Config parse error: {}", e);
+    }
 
-    // let mut state = AppState {
-    //     manager: None,
-    //     heads: Vec::new(),
-    //     serial: None,
-    // };
+    let conn = match Connection::connect_to_env() {
+        Ok(c) => c,
+        Err(e) => return Err(KanskeError::WaylandConnectError(e)),
+    };
+    let display = conn.display();
+    let mut event_queue = conn.new_event_queue();
+    let qh = event_queue.handle();
 
-    // println!("Fetching monitor information...");
-    // event_queue.roundtrip(&mut state).unwrap();
-    // event_queue.roundtrip(&mut state).unwrap();
+    let _registry = display.get_registry(&qh, ());
 
-    // print_heads(&state);
+    let mut state = AppState {
+        manager: None,
+        heads: Vec::new(),
+        serial: None,
+    };
 
-    Ok(())
+    println!("Fetching initial monitor information...");
+    event_queue.roundtrip(&mut state)?;
+    event_queue.roundtrip(&mut state)?;
+
+    println!("Monitoring for display changes...");
+    let mut last_serial = state.serial;
+
+    loop {
+        event_queue.blocking_dispatch(&mut state)?;
+
+        if state.serial != last_serial {
+            println!("Display hotplug detected!");
+            last_serial = state.serial;
+        }
+    }
 }

@@ -1,7 +1,9 @@
 // Parser integration tests based on kanshi-complete-example.config
 
-use kanske_lib::parser::block_parser::types::{
-    ConfigItem, Lexer, OutputCommand, OutputDesc, Parser, Transform,
+use kanske_lib::parser::{
+    ast::{ConfigItem, OutputCommand, OutputDesc, Transform},
+    lexer::Lexer,
+    parse::Parser,
 };
 
 // ============================================================================
@@ -352,7 +354,7 @@ profile second {
 // ============================================================================
 
 #[test]
-#[ignore] // Remove this when exec is implemented
+//#[ignore] // Remove this when exec is implemented
 fn test_parse_exec_directive() {
     let input = r#"
 profile test {
@@ -364,7 +366,7 @@ profile test {
     let tokens = lexer.tokenizer().unwrap();
     let mut parser = Parser::new(tokens);
     let config = parser.parse().unwrap();
-    
+
     match &config.items[0] {
         ConfigItem::Profile(p) => {
             assert_eq!(p.execs.len(), 1);
@@ -375,7 +377,7 @@ profile test {
 }
 
 #[test]
-#[ignore] // Remove this when include is implemented
+//#[ignore] // Remove this when include is implemented
 fn test_parse_include_directive() {
     let input = r#"
 include ~/.config/kanshi/extra.conf
@@ -387,7 +389,7 @@ profile test {
     let tokens = lexer.tokenizer().unwrap();
     let mut parser = Parser::new(tokens);
     let config = parser.parse().unwrap();
-    
+
     assert_eq!(config.items.len(), 2);
     match &config.items[0] {
         ConfigItem::Include(inc) => {
@@ -410,12 +412,12 @@ profile test {
     let tokens = lexer.tokenizer().unwrap();
     let mut parser = Parser::new(tokens);
     let config = parser.parse().unwrap();
-    
+
     match &config.items[0] {
         ConfigItem::Profile(p) => {
             assert_eq!(p.outputs.len(), 2);
             match &p.outputs[1].desc {
-                OutputDesc::Any => {}, // Success
+                OutputDesc::Any => {} // Success
                 _ => panic!("Expected OutputDesc::Any for wildcard"),
             }
         }
@@ -435,7 +437,7 @@ profile {
     let tokens = lexer.tokenizer().unwrap();
     let mut parser = Parser::new(tokens);
     let config = parser.parse().unwrap();
-    
+
     match &config.items[0] {
         ConfigItem::Profile(p) => {
             // Should auto-generate a name or set to None

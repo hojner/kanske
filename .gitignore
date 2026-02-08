@@ -1,1 +1,4 @@
 /target
+*.env
+PLANNING.md
+test3.txt
