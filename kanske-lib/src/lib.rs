@@ -72,6 +72,7 @@ impl Dispatch<zwlr_output_manager_v1::ZwlrOutputManagerV1, ()> for AppState {
     ) {
         match event {
             zwlr_output_manager_v1::Event::Head { head } => {
+                println!("🔔 New head detected!");
                 let head_info = HeadInfo {
                     head: head.clone(),
                     name: String::new(),
@@ -83,8 +84,8 @@ impl Dispatch<zwlr_output_manager_v1::ZwlrOutputManagerV1, ()> for AppState {
                 state.heads.push(head_info);
             }
             zwlr_output_manager_v1::Event::Done { serial } => {
+                println!("🔔 Manager done, serial: {} (heads: {})", serial, state.heads.len());
                 state.serial = Some(serial);
-                println!("Manager done, serial: {}", serial);
             }
             zwlr_output_manager_v1::Event::Finished => {
                 println!("Manager finished");

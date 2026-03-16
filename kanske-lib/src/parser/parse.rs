@@ -1,7 +1,9 @@
 use std::mem::discriminant;
 
 use crate::error::{ConfigParseError, ParseResult};
-use crate::parser::ast::*;
+use crate::parser::ast::{
+    Config, ConfigItem, OutputCommand, OutputConfig, OutputDesc, Profile, Transform,
+};
 use crate::parser::token::Token;
 
 #[derive(Debug, Clone)]

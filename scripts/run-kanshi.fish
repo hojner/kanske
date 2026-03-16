@@ -12,7 +12,8 @@ end
 set SWAY_PID (cat $PID_FILE)
 
 # Find the Sway IPC socket
-set SWAY_SOCK (ls -t $XDG_RUNTIME_DIR/sway-ipc.*.$SWAY_PID.sock 2>/dev/null | head -1)
+set -l socks $XDG_RUNTIME_DIR/sway-ipc.*.$SWAY_PID.sock
+set SWAY_SOCK (for sock in $socks; test -S $sock && echo $sock; end | head -1)
 
 if test -z "$SWAY_SOCK"
     echo "❌ Could not find Sway socket for PID $SWAY_PID"

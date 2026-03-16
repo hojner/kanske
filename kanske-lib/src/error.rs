@@ -4,8 +4,8 @@ pub enum KanskeError {
         file: String,
         source: ConfigParseError,
     },
-    WaylandConnectError(wayland_client::ConnectError),
     ReadIOError(std::io::Error),
+    WaylandConnectError(wayland_client::ConnectError),
     WaylandDispatchError(wayland_client::DispatchError),
 }
 
@@ -67,8 +67,8 @@ impl std::fmt::Display for KanskeError {
             KanskeError::ConfigError { file, source } => {
                 write!(f, "Config file error. File: {}. Error: {}", file, source)
             }
+            KanskeError::ReadIOError(e) => write!(f, "Error reading IO: {}", e),
             KanskeError::WaylandConnectError(e) => write!(f, "Wayland connection error: {}", e),
-            KanskeError::ReadIOError(e) => write!(f, "I/O error: {}", e),
             KanskeError::WaylandDispatchError(e) => write!(f, "Dispatch error: {}", e),
         }
     }

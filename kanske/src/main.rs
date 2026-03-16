@@ -1,32 +1,65 @@
 use std::{path::PathBuf, process};
 
-use kanske_lib::{AppResult, AppState, KanskeError, parser::config_parser::parse_file};
+use kanske_lib::{
+    AppResult, AppState, KanskeError,
+    parser::{ast::Config, config_parser::parse_file},
+};
 use wayland_client::Connection;
 
-// struct OutputConfig {
-//     profile: bool,
-//     name: Arc<str>,
-//     outputs: Arc<[Params]>,
-// }
+const CONFIG_FILE: &str = "./test.txt";
 
-async fn config_parse() -> AppResult<()> {
-    //     let test_config = "profile work-A {
-    //     output DP-1 enable mode 3440x1440@60.00Hz position 0,0 scale 1.0
-    //     output eDP-1 disable
-    // }";
-    // let test_str = /*DP-1 */"enable scale 1.0 mode 3440x1440@60.00Hz position 3,5";
-    // println!("{:?}", test_str);
-    let output = parse_file(PathBuf::from("./test.txt")).await?;
-    dbg!(output);
-    // for i in output.iter() {
-    //     dbg!(i);
-    // }
-    Ok(())
+#[tokio::main]
+async fn main() {
+    if let Err(e) = run().await {
+        eprintln!("Error: {}", e);
+        process::exit(1);
+    }
 }
 
-// fn count_outputs(state: &AppState) -> AppResult<usize> {
-//     return Ok(state.heads.len());
-// }
+async fn config_parse() -> AppResult<Config> {
+    let config = parse_file(PathBuf::from(CONFIG_FILE)).await?;
+    Ok(config)
+}
+
+async fn run() -> AppResult<()> {
+    if let Err(e) = config_parse().await {
+        eprintln!("Config parse error: {}", e);
+    }
+
+    let conn = match Connection::connect_to_env() {
+        Ok(c) => c,
+        Err(e) => return Err(KanskeError::WaylandConnectError(e)),
+    };
+    let display = conn.display();
+    let mut event_queue = conn.new_event_queue();
+    let queue_handle = event_queue.handle();
+
+    let _registry = display.get_registry(&queue_handle, ());
+
+    let mut state = AppState {
+        manager: None,
+        heads: Vec::new(),
+        serial: None,
+    };
+
+    println!("Fetching initial monitor information...");
+    event_queue.roundtrip(&mut state)?;
+
+    println!("Monitoring for display changes...");
+    let mut last_serial = state.serial;
+
+    loop {
+        event_queue.blocking_dispatch(&mut state)?;
+
+        if state.serial != last_serial {
+            println!("\n=== Display hotplug detected! ===");
+            println!("Previous serial: {:?}", last_serial);
+            println!("New serial: {:?}", state.serial);
+            println!("Number of heads: {}", state.heads.len());
+            last_serial = state.serial;
+        }
+    }
+}
 
 fn _print_heads(state: &AppState) {
     println!("\n=== Monitors ===");
@@ -57,50 +90,4 @@ fn _print_heads(state: &AppState) {
         }
     }
     println!();
-}
-
-#[tokio::main]
-async fn main() {
-    if let Err(e) = run().await {
-        eprintln!("Error: {}", e);
-        process::exit(1);
-    }
-}
-
-async fn run() -> AppResult<()> {
-    if let Err(e) = config_parse().await {
-        eprintln!("Config parse error: {}", e);
-    }
-
-    let conn = match Connection::connect_to_env() {
-        Ok(c) => c,
-        Err(e) => return Err(KanskeError::WaylandConnectError(e)),
-    };
-    let display = conn.display();
-    let mut event_queue = conn.new_event_queue();
-    let qh = event_queue.handle();
-
-    let _registry = display.get_registry(&qh, ());
-
-    let mut state = AppState {
-        manager: None,
-        heads: Vec::new(),
-        serial: None,
-    };
-
-    println!("Fetching initial monitor information...");
-    event_queue.roundtrip(&mut state)?;
-    event_queue.roundtrip(&mut state)?;
-
-    println!("Monitoring for display changes...");
-    let mut last_serial = state.serial;
-
-    loop {
-        event_queue.blocking_dispatch(&mut state)?;
-
-        if state.serial != last_serial {
-            println!("Display hotplug detected!");
-            last_serial = state.serial;
-        }
-    }
 }

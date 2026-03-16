@@ -1,23 +1,28 @@
 #!/usr/bin/env fish
 # Test kanske with headless Sway
 
-set SOCKET_NAME kanske-sway
 set TEST_DIR $XDG_RUNTIME_DIR/kanske-test
+set SOCK_FILE $TEST_DIR/swaysock
+set WAYLAND_FILE $TEST_DIR/wayland_display
 
 # Check if Sway is running
-if not test -S $XDG_RUNTIME_DIR/$SOCKET_NAME
-    echo "❌ Sway socket not found at: $XDG_RUNTIME_DIR/$SOCKET_NAME"
-    echo "Start Sway first with: ./scripts/start-sway.fish"
+if not test -f $SOCK_FILE
+    echo "❌ Sway not running. Start with: ./scripts/start-sway.fish"
     exit 1
 end
 
+set -x SWAYSOCK (cat $SOCK_FILE)
+set -x WAYLAND_DISPLAY (cat $WAYLAND_FILE)
+
 echo "=== Testing Sway Connection ==="
-echo "Socket: $XDG_RUNTIME_DIR/$SOCKET_NAME"
+echo "SWAYSOCK: $SWAYSOCK"
+echo "WAYLAND_DISPLAY: $WAYLAND_DISPLAY"
 echo ""
 
-# Export the socket for kanske to use
-set -x WAYLAND_DISPLAY $SOCKET_NAME
-
-echo "Running kanske with headless Sway..."
+# Verify Sway is responsive
+echo "Testing swaymsg..."
+swaymsg -t get_outputs
 echo ""
+
+echo "=== Running kanske ==="
 cargo run --bin kanske

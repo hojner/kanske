@@ -12,7 +12,7 @@ end
 set SWAY_PID (cat $PID_FILE)
 
 # Find the actual Sway socket
-set SWAY_SOCK (ls -t $XDG_RUNTIME_DIR/sway-ipc.*.$SWAY_PID.sock 2>/dev/null | head -1)
+set SWAY_SOCK (find $XDG_RUNTIME_DIR -name "sway-ipc.*.$SWAY_PID.sock" -type s 2>/dev/null | head -1)
 
 if test -z "$SWAY_SOCK"
     echo "❌ Could not find Sway socket for PID $SWAY_PID"
@@ -41,10 +41,12 @@ swaymsg -t get_outputs
 set WAYLAND_SOCK (swaymsg -t get_outputs | grep -o 'wayland-[0-9]*' | head -1)
 
 echo ""
-echo "You can now test with:"
-echo "  export SWAYSOCK=$SWAY_SOCK"
+echo "⚠️  Set in your shell to test manually:"
+echo "  set -gx SWAYSOCK $SWAY_SOCK"
 if test -n "$WAYLAND_SOCK"
-    echo "  export WAYLAND_DISPLAY=$WAYLAND_SOCK"
+    echo "  set -gx WAYLAND_DISPLAY $WAYLAND_SOCK"
 end
+echo ""
+echo "Or run kanske:"
 echo "  kanshi"
 echo "  cargo run --bin kanske"
