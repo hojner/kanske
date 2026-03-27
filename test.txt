@@ -8,6 +8,10 @@ profile "kanske lab" {
      }
 }
 
+profile exempel {
+     output DP-1
+}
+
 
 output DP-1 mode 1200x1400@60Hz enable position 0,0 {
      scale 2.0

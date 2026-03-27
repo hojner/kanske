@@ -1,7 +1,7 @@
 use std::{path::PathBuf, process};
 
 use kanske_lib::{
-    AppResult, AppState, KanskeError,
+    AppResult, KanskeState,
     parser::{ast::Config, config_parser::parse_file},
 };
 use wayland_client::Connection;
@@ -26,28 +26,31 @@ async fn run() -> AppResult<()> {
         eprintln!("Config parse error: {}", e);
     }
 
-    let conn = match Connection::connect_to_env() {
-        Ok(c) => c,
-        Err(e) => return Err(KanskeError::WaylandConnectError(e)),
-    };
-    let display = conn.display();
-    let mut event_queue = conn.new_event_queue();
+    let wayland_connection = Connection::connect_to_env()?;
+    let display = wayland_connection.display();
+    let mut event_queue = wayland_connection.new_event_queue();
     let queue_handle = event_queue.handle();
 
     let _registry = display.get_registry(&queue_handle, ());
 
-    let mut state = AppState {
+    let mut state = KanskeState {
         manager: None,
         heads: Vec::new(),
         serial: None,
     };
 
     println!("Fetching initial monitor information...");
+
+    // Decision: Making two roundtrips will give us the initial state of
+    // the app. It's not pretty but gets the job done, and seems to be the
+    // prefered option for many production apps. For now it's good
+    // enough, might be handled in a while !ready loop later.
+    event_queue.roundtrip(&mut state)?;
     event_queue.roundtrip(&mut state)?;
 
     println!("Monitoring for display changes...");
     let mut last_serial = state.serial;
-
+    dbg!(&state);
     loop {
         event_queue.blocking_dispatch(&mut state)?;
 
@@ -61,7 +64,7 @@ async fn run() -> AppResult<()> {
     }
 }
 
-fn _print_heads(state: &AppState) {
+fn _print_heads(state: &KanskeState) {
     println!("\n=== Monitors ===");
     println!("{}", state.heads.len());
     for (i, head) in state.heads.iter().enumerate() {

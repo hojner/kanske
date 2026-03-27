@@ -1,7 +1,9 @@
+pub mod composer;
 pub mod error;
+pub mod matcher;
 pub mod parser;
 
-pub use error::{AppResult, KanskeError};
+pub use error::AppResult;
 
 use wayland_client::{Connection, Dispatch, QueueHandle, protocol::wl_registry};
 use wayland_protocols_wlr::output_management::v1::client::{
@@ -9,7 +11,8 @@ use wayland_protocols_wlr::output_management::v1::client::{
     zwlr_output_manager_v1, zwlr_output_mode_v1,
 };
 
-pub struct AppState {
+#[derive(Debug)]
+pub struct KanskeState {
     pub manager: Option<zwlr_output_manager_v1::ZwlrOutputManagerV1>,
     pub heads: Vec<HeadInfo>,
     pub serial: Option<u32>,
@@ -23,6 +26,7 @@ pub struct HeadInfo {
     pub enabled: bool,
     pub current_mode: Option<ModeInfo>,
     pub modes: Vec<ModeInfo>,
+    pub position: Option<(i32, i32)>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,7 +37,7 @@ pub struct ModeInfo {
     pub refresh: i32,
 }
 
-impl Dispatch<wl_registry::WlRegistry, ()> for AppState {
+impl Dispatch<wl_registry::WlRegistry, ()> for KanskeState {
     fn event(
         state: &mut Self,
         registry: &wl_registry::WlRegistry,
@@ -61,7 +65,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for AppState {
     }
 }
 
-impl Dispatch<zwlr_output_manager_v1::ZwlrOutputManagerV1, ()> for AppState {
+impl Dispatch<zwlr_output_manager_v1::ZwlrOutputManagerV1, ()> for KanskeState {
     fn event(
         state: &mut Self,
         _: &zwlr_output_manager_v1::ZwlrOutputManagerV1,
@@ -72,19 +76,23 @@ impl Dispatch<zwlr_output_manager_v1::ZwlrOutputManagerV1, ()> for AppState {
     ) {
         match event {
             zwlr_output_manager_v1::Event::Head { head } => {
-                println!("🔔 New head detected!");
                 let head_info = HeadInfo {
-                    head: head.clone(),
+                    head,
                     name: String::new(),
                     description: String::new(),
                     enabled: false,
                     current_mode: None,
                     modes: Vec::new(),
+                    position: None,
                 };
                 state.heads.push(head_info);
             }
             zwlr_output_manager_v1::Event::Done { serial } => {
-                println!("🔔 Manager done, serial: {} (heads: {})", serial, state.heads.len());
+                println!(
+                    "🔔 Manager done, serial: {} (heads: {})",
+                    serial,
+                    state.heads.len()
+                );
                 state.serial = Some(serial);
             }
             zwlr_output_manager_v1::Event::Finished => {
@@ -94,12 +102,12 @@ impl Dispatch<zwlr_output_manager_v1::ZwlrOutputManagerV1, ()> for AppState {
         }
     }
 
-    wayland_client::event_created_child!(AppState, zwlr_output_manager_v1::ZwlrOutputManagerV1, [
+    wayland_client::event_created_child!(KanskeState, zwlr_output_manager_v1::ZwlrOutputManagerV1, [
         zwlr_output_manager_v1::EVT_HEAD_OPCODE => (zwlr_output_head_v1::ZwlrOutputHeadV1, ())
     ]);
 }
 
-impl Dispatch<zwlr_output_head_v1::ZwlrOutputHeadV1, ()> for AppState {
+impl Dispatch<zwlr_output_head_v1::ZwlrOutputHeadV1, ()> for KanskeState {
     fn event(
         state: &mut Self,
         head: &zwlr_output_head_v1::ZwlrOutputHeadV1,
@@ -108,6 +116,11 @@ impl Dispatch<zwlr_output_head_v1::ZwlrOutputHeadV1, ()> for AppState {
         _: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
+        if let zwlr_output_head_v1::Event::Finished = event {
+            state.heads.retain(|h| &h.head != head);
+            return;
+        }
+
         if let Some(head_info) = state.heads.iter_mut().find(|h| &h.head == head) {
             match event {
                 zwlr_output_head_v1::Event::Name { name } => {
@@ -126,24 +139,27 @@ impl Dispatch<zwlr_output_head_v1::ZwlrOutputHeadV1, ()> for AppState {
                 }
                 zwlr_output_head_v1::Event::Mode { mode } => {
                     let mode_info = ModeInfo {
-                        mode: mode.clone(),
+                        mode,
                         width: 0,
                         height: 0,
                         refresh: 0,
                     };
                     head_info.modes.push(mode_info);
                 }
+                zwlr_output_head_v1::Event::Position { x, y } => {
+                    head_info.position = Some((x, y));
+                }
                 _ => {}
             }
         }
     }
 
-    wayland_client::event_created_child!(AppState, zwlr_output_head_v1::ZwlrOutputHeadV1, [
+    wayland_client::event_created_child!(KanskeState, zwlr_output_head_v1::ZwlrOutputHeadV1, [
         zwlr_output_head_v1::EVT_MODE_OPCODE => (zwlr_output_mode_v1::ZwlrOutputModeV1, ())
     ]);
 }
 
-impl Dispatch<zwlr_output_mode_v1::ZwlrOutputModeV1, ()> for AppState {
+impl Dispatch<zwlr_output_mode_v1::ZwlrOutputModeV1, ()> for KanskeState {
     fn event(
         state: &mut Self,
         mode_obj: &zwlr_output_mode_v1::ZwlrOutputModeV1,
@@ -169,7 +185,7 @@ impl Dispatch<zwlr_output_mode_v1::ZwlrOutputModeV1, ()> for AppState {
     }
 }
 
-impl Dispatch<zwlr_output_configuration_v1::ZwlrOutputConfigurationV1, ()> for AppState {
+impl Dispatch<zwlr_output_configuration_v1::ZwlrOutputConfigurationV1, ()> for KanskeState {
     fn event(
         _state: &mut Self,
         _: &zwlr_output_configuration_v1::ZwlrOutputConfigurationV1,
@@ -193,7 +209,9 @@ impl Dispatch<zwlr_output_configuration_v1::ZwlrOutputConfigurationV1, ()> for A
     }
 }
 
-impl Dispatch<zwlr_output_configuration_head_v1::ZwlrOutputConfigurationHeadV1, ()> for AppState {
+impl Dispatch<zwlr_output_configuration_head_v1::ZwlrOutputConfigurationHeadV1, ()>
+    for KanskeState
+{
     fn event(
         _: &mut Self,
         _: &zwlr_output_configuration_head_v1::ZwlrOutputConfigurationHeadV1,

@@ -52,7 +52,10 @@ profile test {
         ConfigItem::Profile(p) => {
             assert_eq!(p.name, Some("test".to_string()));
             assert_eq!(p.outputs.len(), 1);
-            assert!(matches!(p.outputs[0].commands[0], OutputCommand::Enable));
+            assert!(matches!(
+                p.outputs[0].commands[0],
+                OutputCommand::Enabled(true)
+            ));
         }
         _ => panic!("Expected Profile"),
     }

@@ -74,7 +74,6 @@ impl Parser {
             match &self.tokens[self.current] {
                 Token::Output => {
                     profile.outputs.push(self.parse_output()?);
-                    println!("Output result: {:?}", profile);
                 }
                 Token::Exec => todo!(),
                 Token::RightBrace => {
@@ -174,20 +173,13 @@ impl Parser {
 
     fn parse_able(&self) -> ParseResult<OutputCommand> {
         assert!(self.check(&Token::Enable) || self.check(&Token::Disable));
-        if self.check(&Token::Enable) {
-            return Ok(OutputCommand::Enable);
-        } else if self.check(&Token::Disable) {
-            return Ok(OutputCommand::Disable);
-        }
-        Err(ConfigParseError::ParsedStringUnexpectedFormat(
-            "Cannot parse Enable/Disable".to_string(),
-        ))
+        Ok(OutputCommand::Enabled(self.check(&Token::Enable)))
     }
 
     fn parse_mode(&mut self) -> ParseResult<OutputCommand> {
         assert!(self.check(&Token::Mode));
         self.advance();
-        dbg!(&self.tokens[self.current]);
+        // dbg!(&self.tokens[self.current]);
 
         let (width, height, frequency) =
             if let Token::Identifier(mode_str) = &self.tokens[self.current] {
@@ -376,10 +368,6 @@ impl Parser {
     fn check(&self, token: &Token) -> bool {
         discriminant(&self.tokens[self.current]) == discriminant(token)
     }
-
-    // fn peek(&self) -> Token {
-    //     self.tokens[self.current + 1].clone()
-    // }
 
     fn is_at_end(&self) -> bool {
         if self.current >= self.tokens.len() {

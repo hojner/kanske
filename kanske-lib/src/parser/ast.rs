@@ -29,7 +29,7 @@ impl Profile {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum OutputDesc {
     Name(String),
     Any,
@@ -43,8 +43,7 @@ pub struct OutputConfig {
 
 #[derive(Debug, Clone)]
 pub enum OutputCommand {
-    Enable,
-    Disable,
+    Enabled(bool),
     Mode {
         width: u32,
         height: u32,

@@ -55,6 +55,18 @@ impl From<wayland_client::DispatchError> for KanskeError {
     }
 }
 
+impl From<std::io::Error> for KanskeError {
+    fn from(err: std::io::Error) -> Self {
+        KanskeError::ReadIOError(err)
+    }
+}
+
+impl From<wayland_client::ConnectError> for KanskeError {
+    fn from(err: wayland_client::ConnectError) -> Self {
+        KanskeError::WaylandConnectError(err)
+    }
+}
+
 impl ConfigParseError {
     pub fn into_config_error(self, file: String) -> KanskeError {
         KanskeError::ConfigError { file, source: self }
