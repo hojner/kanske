@@ -35,6 +35,15 @@ pub enum OutputDesc {
     Any,
 }
 
+impl OutputDesc {
+    pub fn matches(&self, head_name: &str) -> bool {
+        match self {
+            OutputDesc::Name(n) => n == head_name,
+            OutputDesc::Any => true,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct OutputConfig {
     pub desc: OutputDesc,

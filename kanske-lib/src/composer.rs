@@ -21,41 +21,47 @@ pub fn compose_profiles(config: Config) -> Config {
         return config;
     }
 
-    for p in profiles {
-        let test = needs_merge(p, outputs.clone());
-        dbg!(test);
-    }
-
-    // let composed_profiles = profiles
-    //     .into_iter()
-    //     .for_each(|item| item.outputs.iter().map(|output| output.desc));
-
-    fn needs_merge(profile: &Profile, outputs: Vec<&OutputConfig>) -> bool {
-        dbg!(&profile, &outputs);
-        profile
-            .outputs
-            .iter()
-            .any(|local| outputs.iter().any(|global| global.desc == local.desc))
-    }
-
-    fn merge_output(global_output: &OutputConfig, local_output: &OutputConfig) -> OutputConfig {
-        let mut result: Vec<OutputCommand> = global_output
-            .commands
-            .iter()
-            .filter(|g| {
-                !local_output
-                    .commands
-                    .iter()
-                    .any(|l| discriminant(*g) == discriminant(l))
+    let mut composed: Vec<ConfigItem> = profiles
+        .into_iter()
+        .map(|p| {
+            let merged_outputs: Vec<OutputConfig> = p
+                .outputs
+                .iter()
+                .map(
+                    |local| match outputs.iter().find(|global| global.desc == local.desc) {
+                        Some(global) => merge_output(global, local),
+                        None => local.clone(),
+                    },
+                )
+                .collect();
+            ConfigItem::Profile(Profile {
+                name: p.name.clone(),
+                outputs: merged_outputs,
+                execs: p.execs.clone(),
             })
-            .cloned()
-            .collect();
-        result.extend(local_output.commands.iter().cloned());
-        OutputConfig {
-            desc: local_output.desc.clone(),
-            commands: result,
-        }
-    }
+        })
+        .collect();
 
-    todo!();
+    composed.extend(includes.into_iter().map(|i| ConfigItem::Include(i.clone())));
+
+    Config { items: composed }
+}
+
+fn merge_output(global_output: &OutputConfig, local_output: &OutputConfig) -> OutputConfig {
+    let mut result: Vec<OutputCommand> = global_output
+        .commands
+        .iter()
+        .filter(|g| {
+            !local_output
+                .commands
+                .iter()
+                .any(|l| discriminant(*g) == discriminant(l))
+        })
+        .cloned()
+        .collect();
+    result.extend(local_output.commands.iter().cloned());
+    OutputConfig {
+        desc: local_output.desc.clone(),
+        commands: result,
+    }
 }
