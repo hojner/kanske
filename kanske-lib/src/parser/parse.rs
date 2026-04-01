@@ -52,7 +52,7 @@ impl Parser {
         assert!(self.check(&Token::Profile));
         self.advance();
 
-        // For now profile must have name,
+        // For now, a profile must have a name,
         // will handle name generation for anonymous profiles later
 
         let name = match &self.tokens[self.current] {

@@ -1,18 +1,20 @@
 // AST (Abstract Syntax Tree) types for Kanske configuration
 
-#[derive(Debug, Clone)]
+use wayland_client::protocol::wl_output;
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub items: Vec<ConfigItem>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ConfigItem {
     Profile(Profile),
     Include(IncludeDirective),
     Output(OutputConfig),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Profile {
     pub name: Option<String>,
     pub outputs: Vec<OutputConfig>,
@@ -44,13 +46,13 @@ impl OutputDesc {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct OutputConfig {
     pub desc: OutputDesc,
     pub commands: Vec<OutputCommand>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum OutputCommand {
     Enabled(bool),
     Mode {
@@ -67,7 +69,7 @@ pub enum OutputCommand {
     AdaptiveSync(bool),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Transform {
     Normal,
     Rotate90,
@@ -79,12 +81,27 @@ pub enum Transform {
     Flipped270,
 }
 
-#[derive(Debug, Clone)]
+impl From<Transform> for wl_output::Transform {
+    fn from(t: Transform) -> Self {
+        match t {
+            Transform::Normal => wl_output::Transform::Normal,
+            Transform::Rotate90 => wl_output::Transform::_90,
+            Transform::Rotate180 => wl_output::Transform::_180,
+            Transform::Rotate270 => wl_output::Transform::_270,
+            Transform::Flipped => wl_output::Transform::Flipped,
+            Transform::Flipped90 => wl_output::Transform::Flipped90,
+            Transform::Flipped180 => wl_output::Transform::Flipped180,
+            Transform::Flipped270 => wl_output::Transform::Flipped270,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ExecDirective {
     pub command: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct IncludeDirective {
     pub path: String,
 }

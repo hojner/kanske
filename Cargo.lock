@@ -75,7 +75,6 @@ name = "kanske"
 version = "0.1.0"
 dependencies = [
  "kanske-lib",
- "tokio",
  "wayland-client",
  "wayland-protocols",
  "wayland-protocols-wlr",

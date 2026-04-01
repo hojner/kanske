@@ -7,6 +7,8 @@ pub enum KanskeError {
     ReadIOError(std::io::Error),
     WaylandConnectError(wayland_client::ConnectError),
     WaylandDispatchError(wayland_client::DispatchError),
+    ManagerNotAvailable,
+    NoConfiguration,
 }
 
 #[derive(Debug)]
@@ -82,6 +84,10 @@ impl std::fmt::Display for KanskeError {
             KanskeError::ReadIOError(e) => write!(f, "Error reading IO: {}", e),
             KanskeError::WaylandConnectError(e) => write!(f, "Wayland connection error: {}", e),
             KanskeError::WaylandDispatchError(e) => write!(f, "Dispatch error: {}", e),
+            KanskeError::ManagerNotAvailable => {
+                write!(f, "Cannot get Display Manager from Wayland")
+            }
+            KanskeError::NoConfiguration => write!(f, "No configuration available from compositor"),
         }
     }
 }
