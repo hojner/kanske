@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use wayland_client::{QueueHandle, protocol::wl_output};
 use wayland_protocols_wlr::output_management::v1::client::{
     zwlr_output_configuration_head_v1::ZwlrOutputConfigurationHeadV1,
+    zwlr_output_configuration_v1::ZwlrOutputConfigurationV1,
     zwlr_output_head_v1::AdaptiveSyncState,
 };
 
@@ -10,7 +11,7 @@ use crate::{
     AppResult, KanskeState,
     error::KanskeError,
     matcher::find_matching_profile,
-    parser::ast::{Config, OutputCommand, OutputDesc},
+    parser::ast::{Config, OutputCommand, OutputConfig, OutputDesc},
     wayland_interface::HeadInfo,
 };
 
@@ -42,10 +43,7 @@ pub fn find_and_apply_profile(
                 .ok_or(KanskeError::NoConfiguration)?;
             used_indicies.insert(position);
             let current_head = &state.heads[position];
-            let head_config = output_configuration.enable_head(&current_head.head, qh, ());
-            for command in output.commands.iter() {
-                apply_command(&head_config, command, current_head)?;
-            }
+            configure_head(output, &output_configuration, current_head, qh)?;
         }
         for output in profile
             .outputs
@@ -57,17 +55,44 @@ pub fn find_and_apply_profile(
                 .ok_or(KanskeError::NoConfiguration)?;
             used_indicies.insert(position);
             let current_head = &state.heads[position];
-            let head_config = output_configuration.enable_head(&current_head.head, qh, ());
-            for command in output.commands.iter() {
-                apply_command(&head_config, command, current_head)?;
-            }
+            configure_head(output, &output_configuration, current_head, qh)?;
         }
+        output_configuration.apply();
     } else {
         return Ok(());
     }
 
     Ok(())
 }
+
+fn configure_head(
+    output: &OutputConfig,
+    output_configuration: &ZwlrOutputConfigurationV1,
+    current_head: &HeadInfo,
+    qh: &QueueHandle<KanskeState>,
+) -> AppResult<()> {
+    let is_enabled = output
+        .commands
+        .iter()
+        .find_map(|c| {
+            if let OutputCommand::Enabled(b) = c {
+                Some(*b)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(true);
+    if is_enabled {
+        let head_config = output_configuration.enable_head(&current_head.head, qh, ());
+        for command in output.commands.iter() {
+            apply_command(&head_config, command, current_head)?;
+        }
+    } else {
+        output_configuration.disable_head(&current_head.head);
+    }
+    Ok(())
+}
+
 fn apply_command(
     head_config: &ZwlrOutputConfigurationHeadV1,
     command: &OutputCommand,
@@ -86,9 +111,10 @@ fn apply_command(
                     m.width == *width as i32
                         && m.height == *height as i32
                         && if let Some(f) = frequency {
-                            m.refresh == (f * 1000.0) as i32
+                            let requested = (f * 1000.0) as i32;
+                            (m.refresh - requested).abs() < 500
                         } else {
-                            todo!();
+                            true
                         }
                 })
                 .ok_or(KanskeError::NoConfiguration)?;
@@ -104,15 +130,15 @@ fn apply_command(
         OutputCommand::Transform(transform) => {
             head_config.set_transform(wl_output::Transform::from(*transform))
         }
-        OutputCommand::AdaptiveSync(b) => match b {
-            true => {
-                head_config.set_adaptive_sync(AdaptiveSyncState::Enabled);
-            }
-            false => {
-                head_config.set_adaptive_sync(AdaptiveSyncState::Disabled);
-            }
-        },
-        _ => {}
+        OutputCommand::AdaptiveSync(b) => {
+            let state = if *b {
+                AdaptiveSyncState::Enabled
+            } else {
+                AdaptiveSyncState::Disabled
+            };
+            head_config.set_adaptive_sync(state);
+        }
+        OutputCommand::Enabled(_) => {}
     }
     Ok(())
 }
