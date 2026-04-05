@@ -38,16 +38,15 @@ impl Dispatch<wl_registry::WlRegistry, ()> for KanskeState {
             interface,
             version,
         } = event
+            && interface == "zwlr_output_manager_v1"
         {
-            if interface == "zwlr_output_manager_v1" {
-                let manager = registry.bind::<zwlr_output_manager_v1::ZwlrOutputManagerV1, _, _>(
-                    name,
-                    version.min(4),
-                    qh,
-                    (),
-                );
-                state.manager = Some(manager);
-            }
+            let manager = registry.bind::<zwlr_output_manager_v1::ZwlrOutputManagerV1, _, _>(
+                name,
+                version.min(4),
+                qh,
+                (),
+            );
+            state.manager = Some(manager);
         }
     }
 }
@@ -120,7 +119,7 @@ impl Dispatch<zwlr_output_head_v1::ZwlrOutputHeadV1, ()> for KanskeState {
                     head_info.enabled = enabled != 0;
                 }
                 zwlr_output_head_v1::Event::CurrentMode { mode } => {
-                    if let Some(mode_info) = head_info.modes.iter().find(|m| &m.mode == &mode) {
+                    if let Some(mode_info) = head_info.modes.iter().find(|m| m.mode == mode) {
                         head_info.current_mode = Some(mode_info.clone());
                     }
                 }

@@ -1,5 +1,5 @@
 pub mod ast;
-pub mod token;
+pub mod config_parser;
 pub mod lexer;
 pub mod parse;
-pub mod config_parser;
+pub mod token;

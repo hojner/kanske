@@ -161,13 +161,11 @@ impl Parser {
             Token::Scale => self.parse_scale(),
             Token::Transform => self.parse_transform(),
             Token::AdaptiveSync => self.parse_adaptive_sync(),
-            other => {
-                return Err(ConfigParseError::UnexpectedToken {
-                    expected: "output command".to_string(),
-                    found: format!("{:?}", other),
-                    position: self.current,
-                });
-            }
+            other => Err(ConfigParseError::UnexpectedToken {
+                expected: "output command".to_string(),
+                found: format!("{:?}", other),
+                position: self.current,
+            }),
         }
     }
 

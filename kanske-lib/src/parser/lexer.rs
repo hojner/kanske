@@ -1,6 +1,6 @@
 // Lexical analyzer (tokenizer) for Kanske configuration files
 
-use crate::error::{ParseResult, ConfigParseError};
+use crate::error::{ConfigParseError, ParseResult};
 use crate::parser::token::Token;
 
 pub struct Lexer {
@@ -39,18 +39,16 @@ impl Lexer {
         match ch {
             '{' => {
                 self.advance();
-                return Ok(Token::LeftBrace);
+                Ok(Token::LeftBrace)
             }
             '}' => {
                 self.advance();
-                return Ok(Token::RightBrace);
+                Ok(Token::RightBrace)
             }
             '"' => self.read_quoted_string(),
             _ if ch.is_alphabetic() || ch == '*' => self.read_identifier(),
             _ if ch.is_numeric() || ch == '-' => {
-                if self.is_mode_str() {
-                    self.read_identifier()
-                } else if self.is_position_str() {
+                if self.is_mode_str() || self.is_position_str() {
                     self.read_identifier()
                 } else {
                     self.read_number()

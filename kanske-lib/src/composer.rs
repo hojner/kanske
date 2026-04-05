@@ -48,7 +48,7 @@ pub fn compose_profiles(config: Config) -> AppResult<Config> {
         })
         .collect::<AppResult<Vec<_>>>()?;
 
-    composed.extend(includes.into_iter().map(|i| ConfigItem::Include(i)));
+    composed.extend(includes.into_iter().map(ConfigItem::Include));
 
     Ok(Config { items: composed })
 }
