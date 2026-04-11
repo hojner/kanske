@@ -25,4 +25,4 @@ swaymsg -t get_outputs
 echo ""
 
 echo "=== Running kanske ==="
-cargo run --bin kanske
+RUST_LOG=trace cargo run --bin kanske

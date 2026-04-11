@@ -1,5 +1,7 @@
 use std::mem::discriminant;
 
+use tracing::{debug, trace};
+
 use crate::{
     AppResult,
     parser::ast::{Config, ConfigItem, IncludeDirective, OutputCommand, OutputConfig, Profile},
@@ -18,6 +20,7 @@ pub fn compose_profiles(config: Config) -> AppResult<Config> {
         }
     }
     if outputs.is_empty() {
+        debug!("No global outputs, skipping composition");
         let items = profiles
             .into_iter()
             .map(ConfigItem::Profile)
@@ -29,13 +32,21 @@ pub fn compose_profiles(config: Config) -> AppResult<Config> {
     let mut composed: Vec<ConfigItem> = profiles
         .into_iter()
         .map(|p| -> AppResult<ConfigItem> {
+            let profile_name = p.name.as_deref().unwrap_or("<anonymous>");
             let merged_outputs: Vec<OutputConfig> = p
                 .outputs
                 .iter()
                 .map(
                     |local| match outputs.iter().find(|global| global.desc == local.desc) {
-                        Some(global) => merge_output(global, local),
-
+                        Some(global) => {
+                            debug!(
+                                profile = profile_name,
+                                output = ?local.desc,
+                                global_commands = global.commands.len(),
+                                "Merging global defaults into profile output"
+                            );
+                            merge_output(global, local)
+                        }
                         None => Ok(local.clone()),
                     },
                 )
@@ -61,10 +72,14 @@ fn merge_output(
         .commands
         .iter()
         .filter(|g| {
-            !local_output
+            let local_override = local_output
                 .commands
                 .iter()
-                .any(|l| discriminant(*g) == discriminant(l))
+                .find(|l| discriminant(*g) == discriminant(l));
+            if let Some(local_cmd) = local_override {
+                trace!(global = ?g, local = ?local_cmd, "Global command overridden by local:");
+            }
+            local_override.is_none()
         })
         .cloned()
         .collect();

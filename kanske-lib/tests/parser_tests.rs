@@ -403,7 +403,6 @@ profile test {
 }
 
 #[test]
-#[ignore] // Remove this when wildcard output is implemented
 fn test_parse_wildcard_output() {
     let input = r#"
 profile test {

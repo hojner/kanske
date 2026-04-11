@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use tracing::{debug, info, warn};
 use wayland_client::{QueueHandle, protocol::wl_output};
 use wayland_protocols_wlr::output_management::v1::client::{
     zwlr_output_configuration_head_v1::ZwlrOutputConfigurationHeadV1,
@@ -21,6 +22,7 @@ pub fn find_and_apply_profile(
     config: &Config,
 ) -> AppResult<()> {
     if let Some(profile) = find_matching_profile(&state.heads, config) {
+        info!(profile = ?profile.name, "Applying profile");
         let mut used_indicies: HashSet<usize> = HashSet::new();
         let manager = state
             .manager
@@ -43,6 +45,7 @@ pub fn find_and_apply_profile(
                 .ok_or(KanskeError::NoConfiguration)?;
             used_indicies.insert(position);
             let current_head = &state.heads[position];
+            debug!(output = ?output.desc, head = %current_head.name, "Named output matched to head");
             configure_head(output, &output_configuration, current_head, qh)?;
         }
         for output in profile
@@ -55,6 +58,7 @@ pub fn find_and_apply_profile(
                 .ok_or(KanskeError::NoConfiguration)?;
             used_indicies.insert(position);
             let current_head = &state.heads[position];
+            debug!(head = %current_head.name, "Wildcard output consuming head");
             configure_head(output, &output_configuration, current_head, qh)?;
         }
         output_configuration.apply();
@@ -83,11 +87,13 @@ fn configure_head(
         })
         .unwrap_or(true);
     if is_enabled {
+        debug!(head = %current_head.name, commands = output.commands.len(), "Enabling head");
         let head_config = output_configuration.enable_head(&current_head.head, qh, ());
         for command in output.commands.iter() {
             apply_command(&head_config, command, current_head)?;
         }
     } else {
+        debug!(head = %current_head.name, "Disabling head");
         output_configuration.disable_head(&current_head.head);
     }
     Ok(())
@@ -116,21 +122,46 @@ fn apply_command(
                         } else {
                             true
                         }
-                })
-                .ok_or(KanskeError::NoConfiguration)?;
+                });
 
-            head_config.set_mode(&mode_info.mode);
+            match mode_info {
+                Some(m) => {
+                    debug!(
+                        head = %current_head.name,
+                        width = m.width,
+                        height = m.height,
+                        refresh = m.refresh,
+                        "Setting mode"
+                    );
+                    head_config.set_mode(&m.mode);
+                }
+                None => {
+                    warn!(
+                        head = %current_head.name,
+                        requested_width = width,
+                        requested_height = height,
+                        requested_freq = ?frequency,
+                        available_modes = current_head.modes.len(),
+                        "Requested mode not found"
+                    );
+                    return Err(KanskeError::NoConfiguration);
+                }
+            }
         }
         OutputCommand::Position { x, y } => {
+            debug!(head = %current_head.name, x, y, "Setting position");
             head_config.set_position(*x, *y);
         }
         OutputCommand::Scale(scale) => {
+            debug!(head = %current_head.name, scale, "Setting scale");
             head_config.set_scale(*scale as f64);
         }
         OutputCommand::Transform(transform) => {
+            debug!(head = %current_head.name, transform = ?transform, "Setting transform");
             head_config.set_transform(wl_output::Transform::from(*transform))
         }
         OutputCommand::AdaptiveSync(b) => {
+            debug!(head = %current_head.name, adaptive_sync = b, "Setting adaptive sync");
             let state = if *b {
                 AdaptiveSyncState::Enabled
             } else {

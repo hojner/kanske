@@ -1,3 +1,5 @@
+use tracing::{debug, info, trace, warn};
+
 use crate::KanskeState;
 use wayland_client::{Connection, Dispatch, QueueHandle, protocol::wl_registry};
 use wayland_protocols_wlr::output_management::v1::client::{
@@ -40,6 +42,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for KanskeState {
         } = event
             && interface == "zwlr_output_manager_v1"
         {
+            debug!(version, "Found output manager protocol");
             let manager = registry.bind::<zwlr_output_manager_v1::ZwlrOutputManagerV1, _, _>(
                 name,
                 version.min(4),
@@ -74,15 +77,11 @@ impl Dispatch<zwlr_output_manager_v1::ZwlrOutputManagerV1, ()> for KanskeState {
                 state.heads.push(head_info);
             }
             zwlr_output_manager_v1::Event::Done { serial } => {
-                println!(
-                    "🔔 Manager done, serial: {} (heads: {})",
-                    serial,
-                    state.heads.len()
-                );
+                debug!(serial, heads = state.heads.len(), "Manager done");
                 state.serial = Some(serial);
             }
             zwlr_output_manager_v1::Event::Finished => {
-                println!("Manager finished");
+                info!("Output manager finished");
             }
             _ => {}
         }
@@ -103,6 +102,8 @@ impl Dispatch<zwlr_output_head_v1::ZwlrOutputHeadV1, ()> for KanskeState {
         _qh: &QueueHandle<Self>,
     ) {
         if let zwlr_output_head_v1::Event::Finished = event {
+            let name = state.heads.iter().find(|h| &h.head == head).map(|h| h.name.clone());
+            debug!(head = ?name, "Head removed");
             state.heads.retain(|h| &h.head != head);
             return;
         }
@@ -110,20 +111,31 @@ impl Dispatch<zwlr_output_head_v1::ZwlrOutputHeadV1, ()> for KanskeState {
         if let Some(head_info) = state.heads.iter_mut().find(|h| &h.head == head) {
             match event {
                 zwlr_output_head_v1::Event::Name { name } => {
+                    trace!(name = %name, "Head name set");
                     head_info.name = name;
                 }
                 zwlr_output_head_v1::Event::Description { description } => {
+                    trace!(description = %description, "Head description set");
                     head_info.description = description;
                 }
                 zwlr_output_head_v1::Event::Enabled { enabled } => {
-                    head_info.enabled = enabled != 0;
+                    let enabled = enabled != 0;
+                    trace!(head = %head_info.name, enabled, "Head enabled changed");
+                    head_info.enabled = enabled;
                 }
                 zwlr_output_head_v1::Event::CurrentMode { mode } => {
                     if let Some(mode_info) = head_info.modes.iter().find(|m| m.mode == mode) {
+                        trace!(
+                            head = %head_info.name,
+                            width = mode_info.width,
+                            height = mode_info.height,
+                            "Head current mode set"
+                        );
                         head_info.current_mode = Some(mode_info.clone());
                     }
                 }
                 zwlr_output_head_v1::Event::Mode { mode } => {
+                    trace!(head = %head_info.name, "New mode added to head");
                     let mode_info = ModeInfo {
                         mode,
                         width: 0,
@@ -133,6 +145,7 @@ impl Dispatch<zwlr_output_head_v1::ZwlrOutputHeadV1, ()> for KanskeState {
                     head_info.modes.push(mode_info);
                 }
                 zwlr_output_head_v1::Event::Position { x, y } => {
+                    trace!(head = %head_info.name, x, y, "Head position set");
                     head_info.position = Some((x, y));
                 }
                 _ => {}
@@ -182,13 +195,13 @@ impl Dispatch<zwlr_output_configuration_v1::ZwlrOutputConfigurationV1, ()> for K
     ) {
         match event {
             zwlr_output_configuration_v1::Event::Succeeded => {
-                println!("Configuration succeeded!");
+                info!("Configuration applied successfully");
             }
             zwlr_output_configuration_v1::Event::Failed => {
-                println!("Configuration failed!");
+                warn!("Configuration apply failed");
             }
             zwlr_output_configuration_v1::Event::Cancelled => {
-                println!("Configuration cancelled!");
+                warn!("Configuration apply cancelled");
             }
             _ => {}
         }

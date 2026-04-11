@@ -12,33 +12,46 @@ end
 
 set -x SWAYSOCK (cat $SOCK_FILE)
 
+function list_outputs
+    swaymsg -t get_outputs | grep -oE '"name": "[^"]+"' | grep -oE '"[^"]+\"$' | tr -d '"'
+end
+
 echo "=== Simulating Monitor Hotplug Events ==="
 echo "Initial outputs:"
-swaymsg -t get_outputs | grep -E '"name"' | sed 's/.*"name": "\([^"]*\)".*/  - \1/'
+set initial_outputs (list_outputs)
+for o in $initial_outputs
+    echo "  - $o"
+end
 echo ""
 
-echo "Creating second monitor (HEADLESS-2)..."
-swaymsg create_output HEADLESS-2
+echo "Creating two monitors..."
+swaymsg create_output
+swaymsg create_output
 sleep 1
-swaymsg -t get_outputs | grep -E '"name"' | sed 's/.*"name": "\([^"]*\)".*/  - \1/'
+
+set new_outputs (list_outputs)
+set added_outputs
+for o in $new_outputs
+    if not contains $o $initial_outputs
+        set -a added_outputs $o
+    end
+end
+
+for o in $new_outputs
+    echo "  - $o"
+end
 echo ""
 
-echo "Creating third monitor (HEADLESS-3)..."
-swaymsg create_output HEADLESS-3
-sleep 1
-swaymsg -t get_outputs | grep -E '"name"' | sed 's/.*"name": "\([^"]*\)".*/  - \1/'
-echo ""
+for o in $added_outputs
+    echo "Removing $o..."
+    swaymsg output $o unplug
+    sleep 1
+end
 
-echo "Removing second monitor..."
-swaymsg output HEADLESS-2 unplug
-sleep 1
-swaymsg -t get_outputs | grep -E '"name"' | sed 's/.*"name": "\([^"]*\)".*/  - \1/'
-echo ""
-
-echo "Removing third monitor..."
-swaymsg output HEADLESS-3 unplug
-sleep 1
-swaymsg -t get_outputs | grep -E '"name"' | sed 's/.*"name": "\([^"]*\)".*/  - \1/'
+echo "Final outputs:"
+for o in (list_outputs)
+    echo "  - $o"
+end
 echo ""
 
 echo "✓ Hotplug simulation complete"

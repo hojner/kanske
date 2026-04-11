@@ -1,22 +1,23 @@
+# Profiles for headless Sway testing
+# start-sway.fish creates HEADLESS-1 at 1920x1080
+# simulate-hotplug.fish adds two more then removes them
 
-
-# This is a comment
-
-profile "kanske lab" {
-     output eDP-1 {
-          disable
-     }
+# Matches the initial single-monitor state
+profile single {
+    output HEADLESS-1 enable mode 1920x1080 position 0,0
 }
 
-profile exempel {
-     output DP-1
+# Matches after first hotplug event
+profile double {
+    output HEADLESS-1 enable mode 1920x1080 position 0,0
+    output * enable mode 1920x1080 position 1920,0
 }
 
-
-output DP-1 mode 1200x1400@60Hz enable position 0,0 {
-     scale 2.0
-     transform flipped-90
-     adaptive_sync off
+# Matches after simulate-hotplug creates two additional outputs
+profile triple {
+    output HEADLESS-1 enable mode 1920x1080 position 0,0
+    output * enable mode 1920x1080 position 1920,0
+    output * enable mode 1920x1080 position 3840,0
 }
 
-output test
+output HEADLESS-1 enable mode 1920x1080 position 50,0

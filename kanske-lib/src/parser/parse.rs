@@ -18,14 +18,6 @@ impl Parser {
     }
 
     pub fn parse(&mut self) -> ParseResult<Config> {
-        // Assert that the first item is profile or output, or EOF if the config was empty
-        // Also assert that the last item is always EOF.
-        assert!(
-            self.tokens.first().expect("first item must exist") == &Token::Output
-                || self.tokens.first().expect("first item must exist") == &Token::Profile
-                || self.tokens.first().expect("first item must exist") == &Token::Eof
-        );
-        assert!(self.tokens.last().expect("last item must exist") == &Token::Eof);
         let mut config = Config { items: Vec::new() };
         let mut config_item;
 
@@ -49,11 +41,13 @@ impl Parser {
     }
 
     fn parse_profile(&mut self) -> ParseResult<ConfigItem> {
-        assert!(self.check(&Token::Profile));
+        self.validate(&Token::Profile)?;
         self.advance();
 
+        // TODO:
         // For now, a profile must have a name,
         // will handle name generation for anonymous profiles later
+        //
 
         let name = match &self.tokens[self.current] {
             Token::String(s) | Token::Identifier(s) => s.clone(),
@@ -63,11 +57,9 @@ impl Parser {
                 });
             }
         };
-
         let mut profile = Profile::new(name);
-
         self.advance();
-        assert!(self.check(&Token::LeftBrace));
+        self.validate(&Token::LeftBrace)?;
         self.advance();
 
         while !self.is_at_end() {
@@ -93,11 +85,14 @@ impl Parser {
     }
 
     fn parse_output(&mut self) -> ParseResult<OutputConfig> {
-        assert!(self.check(&Token::Output));
+        self.validate(&Token::Output)?;
         self.advance();
 
         let desc = if let Token::Identifier(desc) = &self.tokens[self.current] {
-            OutputDesc::Name(desc.clone())
+            match desc.as_str() {
+                "*" => OutputDesc::Any,
+                _ => OutputDesc::Name(desc.clone()),
+            }
         } else {
             return Err(ConfigParseError::UnexpectedToken {
                 expected: "output name".to_string(),
@@ -118,7 +113,7 @@ impl Parser {
                         commands.push(self.parse_output_command()?);
                         self.advance();
                     }
-                    assert!(self.check(&Token::RightBrace));
+                    self.validate(&Token::RightBrace)?;
                     self.advance();
                     break;
                 }
@@ -130,8 +125,7 @@ impl Parser {
                 | Token::Profile => {
                     break;
                 }
-                Token::Enable
-                | Token::Disable
+                Token::Enabled(_)
                 | Token::Mode
                 | Token::Position
                 | Token::Scale
@@ -155,7 +149,7 @@ impl Parser {
 
     fn parse_output_command(&mut self) -> ParseResult<OutputCommand> {
         match &self.tokens[self.current] {
-            Token::Enable | Token::Disable => self.parse_able(),
+            Token::Enabled(b) => Ok(OutputCommand::Enabled(*b)),
             Token::Mode => self.parse_mode(),
             Token::Position => self.parse_position(),
             Token::Scale => self.parse_scale(),
@@ -169,15 +163,9 @@ impl Parser {
         }
     }
 
-    fn parse_able(&self) -> ParseResult<OutputCommand> {
-        assert!(self.check(&Token::Enable) || self.check(&Token::Disable));
-        Ok(OutputCommand::Enabled(self.check(&Token::Enable)))
-    }
-
     fn parse_mode(&mut self) -> ParseResult<OutputCommand> {
-        assert!(self.check(&Token::Mode));
+        self.validate(&Token::Mode)?;
         self.advance();
-        // dbg!(&self.tokens[self.current]);
 
         let (width, height, frequency) =
             if let Token::Identifier(mode_str) = &self.tokens[self.current] {
@@ -240,7 +228,7 @@ impl Parser {
     }
 
     fn parse_position(&mut self) -> ParseResult<OutputCommand> {
-        assert!(self.check(&Token::Position));
+        self.validate(&Token::Position)?;
         self.advance();
 
         let (x, y) = if let Token::Identifier(position_str) = &self.tokens[self.current] {
@@ -286,7 +274,7 @@ impl Parser {
     }
 
     fn parse_scale(&mut self) -> ParseResult<OutputCommand> {
-        assert!(self.check(&Token::Scale));
+        self.validate(&Token::Scale)?;
         self.advance();
 
         let s = if let Token::Number(scale_str) = &self.tokens[self.current] {
@@ -303,7 +291,7 @@ impl Parser {
     }
 
     fn parse_transform(&mut self) -> ParseResult<OutputCommand> {
-        assert!(self.check(&Token::Transform));
+        self.validate(&Token::Transform)?;
         self.advance();
 
         let transform = match &self.tokens[self.current] {
@@ -341,7 +329,7 @@ impl Parser {
     }
 
     fn parse_adaptive_sync(&mut self) -> ParseResult<OutputCommand> {
-        assert!(self.check(&Token::AdaptiveSync));
+        self.validate(&Token::AdaptiveSync)?;
         self.advance();
 
         let adaptive_sync = if let Token::Identifier(a) = &self.tokens[self.current] {
@@ -365,6 +353,17 @@ impl Parser {
 
     fn check(&self, token: &Token) -> bool {
         discriminant(&self.tokens[self.current]) == discriminant(token)
+    }
+
+    fn validate(&self, token: &Token) -> ParseResult<()> {
+        if !self.check(token) {
+            return Err(ConfigParseError::UnexpectedToken {
+                expected: format!("{:?}", token),
+                found: format!("{:?}", self.tokens[self.current]),
+                position: self.current,
+            });
+        }
+        Ok(())
     }
 
     fn is_at_end(&self) -> bool {

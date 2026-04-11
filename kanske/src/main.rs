@@ -5,11 +5,19 @@ use kanske_lib::{
     applier::find_and_apply_profile,
     parser::{ast::Config, config_parser::parse_file},
 };
+use tracing::{debug, info};
 use wayland_client::{Connection, EventQueue, QueueHandle};
 
 const CONFIG_FILE: &str = "./test.txt";
 
 fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "kanske=info,kanske_lib=info".parse().unwrap()),
+        )
+        .init();
+
     if let Err(e) = run() {
         eprintln!("Error: {}", e);
         process::exit(1);
@@ -17,10 +25,11 @@ fn main() {
 }
 
 fn run() -> AppResult<()> {
+    info!(config = CONFIG_FILE, "Loading config");
     let config = parse_file(PathBuf::from(CONFIG_FILE))?;
     let (mut state, mut event_queue, queue_handle) = wayland_setup()?;
 
-    println!("Monitoring for display changes...");
+    info!("Monitoring for display changes...");
 
     event_loop(&mut state, &mut event_queue, &queue_handle, &config)
 }
@@ -31,6 +40,7 @@ fn wayland_setup() -> AppResult<(
     QueueHandle<KanskeState>,
 )> {
     let wayland_connection = Connection::connect_to_env()?;
+    debug!("Wayland connection established");
     let mut event_queue = wayland_connection.new_event_queue();
     let queue_handle: QueueHandle<KanskeState> = event_queue.handle();
 
@@ -47,6 +57,7 @@ fn wayland_setup() -> AppResult<(
     // enough, might be handled in a while !ready loop later.
     event_queue.roundtrip(&mut state)?;
     event_queue.roundtrip(&mut state)?;
+    debug!(heads = state.heads.len(), serial = ?state.serial, "Initial roundtrip complete");
 
     Ok((state, event_queue, queue_handle))
 }
@@ -62,12 +73,13 @@ fn event_loop(
     loop {
         event_queue.blocking_dispatch(state)?;
         if state.serial != last_serial {
-            println!("\n=== Display hotplug detected! ===");
-            println!("Previous serial: {:?}", last_serial);
-            println!("New serial: {:?}", state.serial);
-            println!("Number of heads: {}", state.heads.len());
-            last_serial = state.serial;
+            info!("Display hotplug detected");
+            debug!(previous_serial = ?last_serial, new_serial = ?state.serial, heads = state.heads.len());
             find_and_apply_profile(state, queue_handle, config)?;
+            // Drain events from our own apply (Succeeded/Failed + new Done serial)
+            // so we don't re-trigger on our own configuration change.
+            event_queue.roundtrip(state)?;
+            last_serial = state.serial;
         }
     }
 }
