@@ -1,22 +1,23 @@
-use std::{path::PathBuf, process};
+use std::{env, fs, path::PathBuf, process};
 
 use kanske_lib::{
     AppResult, KanskeState,
     applier::find_and_apply_profile,
+    error::KanskeError,
     parser::{ast::Config, config_parser::parse_file},
 };
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use wayland_client::{Connection, EventQueue, QueueHandle};
 
-const CONFIG_FILE: &str = "./test.txt";
+const DEFAULT_CONFIG: &str = include_str!("../default_config");
 
 fn main() {
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "kanske=info,kanske_lib=info".parse().unwrap()),
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("kanske=info,kanske_lib=info")),
         )
-        .init();
+        .try_init();
 
     if let Err(e) = run() {
         eprintln!("Error: {}", e);
@@ -25,13 +26,38 @@ fn main() {
 }
 
 fn run() -> AppResult<()> {
-    info!(config = CONFIG_FILE, "Loading config");
-    let config = parse_file(PathBuf::from(CONFIG_FILE))?;
+    let config_file = config_path()?;
+    ensure_config(&config_file)?;
+    info!(config = %config_file.display(), "Loading config");
+    let config = parse_file(config_file)?;
     let (mut state, mut event_queue, queue_handle) = wayland_setup()?;
 
     info!("Monitoring for display changes...");
 
     event_loop(&mut state, &mut event_queue, &queue_handle, &config)
+}
+
+fn ensure_config(path: &PathBuf) -> AppResult<()> {
+    if path.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, DEFAULT_CONFIG)?;
+    info!(path = %path.display(), "Created default config file");
+    Ok(())
+}
+
+fn config_path() -> AppResult<PathBuf> {
+    let config_dir = match env::var_os("XDG_CONFIG_HOME") {
+        Some(dir) => PathBuf::from(dir),
+        None => {
+            let home = env::var_os("HOME").ok_or(KanskeError::NoConfigDir)?;
+            PathBuf::from(home).join(".config")
+        }
+    };
+    Ok(config_dir.join("kanske").join("config"))
 }
 
 fn wayland_setup() -> AppResult<(
@@ -75,42 +101,19 @@ fn event_loop(
         if state.serial != last_serial {
             info!("Display hotplug detected");
             debug!(previous_serial = ?last_serial, new_serial = ?state.serial, heads = state.heads.len());
-            find_and_apply_profile(state, queue_handle, config)?;
+            match find_and_apply_profile(state, queue_handle, config) {
+                Ok(()) => {}
+                Err(e @ (KanskeError::ManagerNotAvailable | KanskeError::NoSerial)) => {
+                    return Err(e);
+                }
+                Err(e) => {
+                    warn!("Profile apply failed: {}", e);
+                }
+            }
             // Drain events from our own apply (Succeeded/Failed + new Done serial)
             // so we don't re-trigger on our own configuration change.
             event_queue.roundtrip(state)?;
             last_serial = state.serial;
         }
     }
-}
-
-fn _print_heads(state: &KanskeState) {
-    println!("\n=== Monitors ===");
-    println!("{}", state.heads.len());
-    for (i, head) in state.heads.iter().enumerate() {
-        println!("\nMonitor {}:", i);
-        println!("  Name: {}", head.name);
-        println!("  Description: {}", head.description);
-        println!("  Enabled: {}", head.enabled);
-
-        if let Some(mode) = &head.current_mode {
-            println!(
-                "  Current Mode: {}x{} @ {:.2}Hz",
-                mode.width,
-                mode.height,
-                mode.refresh as f32 / 1000.0
-            );
-        }
-
-        println!("  Available Modes:");
-        for mode in &head.modes {
-            println!(
-                "    {}x{} @ {:.2}Hz",
-                mode.width,
-                mode.height,
-                mode.refresh as f32 / 1000.0
-            );
-        }
-    }
-    println!();
 }

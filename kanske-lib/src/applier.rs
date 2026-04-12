@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info};
 use wayland_client::{QueueHandle, protocol::wl_output};
 use wayland_protocols_wlr::output_management::v1::client::{
     zwlr_output_configuration_head_v1::ZwlrOutputConfigurationHeadV1,
@@ -28,7 +28,7 @@ pub fn find_and_apply_profile(
             .manager
             .as_ref()
             .ok_or(KanskeError::ManagerNotAvailable)?;
-        let serial = state.serial.ok_or(KanskeError::NoConfiguration)?;
+        let serial = state.serial.ok_or(KanskeError::NoSerial)?;
         let output_configuration = manager.create_configuration(serial, qh, ());
 
         for output in profile
@@ -42,7 +42,13 @@ pub fn find_and_apply_profile(
                 .enumerate()
                 .find(|(i, h)| !used_indicies.contains(i) && output.desc.matches(&h.name))
                 .map(|(i, _)| i)
-                .ok_or(KanskeError::NoConfiguration)?;
+                .ok_or_else(|| {
+                    let name = match &output.desc {
+                        OutputDesc::Name(n) => n.clone(),
+                        OutputDesc::Any => "*".to_string(),
+                    };
+                    KanskeError::HeadNotFound { name }
+                })?;
             used_indicies.insert(position);
             let current_head = &state.heads[position];
             debug!(output = ?output.desc, head = %current_head.name, "Named output matched to head");
@@ -55,7 +61,9 @@ pub fn find_and_apply_profile(
         {
             let position = (0..state.heads.len())
                 .find(|i| !used_indicies.contains(i))
-                .ok_or(KanskeError::NoConfiguration)?;
+                .ok_or_else(|| KanskeError::HeadNotFound {
+                    name: "*".to_string(),
+                })?;
             used_indicies.insert(position);
             let current_head = &state.heads[position];
             debug!(head = %current_head.name, "Wildcard output consuming head");
@@ -136,15 +144,14 @@ fn apply_command(
                     head_config.set_mode(&m.mode);
                 }
                 None => {
-                    warn!(
+                    error!(
                         head = %current_head.name,
                         requested_width = width,
                         requested_height = height,
                         requested_freq = ?frequency,
                         available_modes = current_head.modes.len(),
-                        "Requested mode not found"
+                        "Requested mode not found, skipping"
                     );
-                    return Err(KanskeError::NoConfiguration);
                 }
             }
         }

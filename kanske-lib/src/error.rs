@@ -8,7 +8,10 @@ pub enum KanskeError {
     WaylandConnectError(wayland_client::ConnectError),
     WaylandDispatchError(wayland_client::DispatchError),
     ManagerNotAvailable,
-    NoConfiguration,
+    NoSerial,
+    HeadNotFound { name: String },
+    ModeNotFound { head: String, width: u32, height: u32 },
+    NoConfigDir,
 }
 
 #[derive(Debug)]
@@ -87,7 +90,19 @@ impl std::fmt::Display for KanskeError {
             KanskeError::ManagerNotAvailable => {
                 write!(f, "Cannot get Display Manager from Wayland")
             }
-            KanskeError::NoConfiguration => write!(f, "No configuration available from compositor"),
+            KanskeError::NoSerial => {
+                write!(f, "No configuration serial received from compositor")
+            }
+            KanskeError::HeadNotFound { name } => {
+                write!(f, "Output head not found: {}", name)
+            }
+            KanskeError::ModeNotFound { head, width, height } => {
+                write!(f, "Mode {}x{} not available on head {}", width, height, head)
+            }
+            KanskeError::NoConfigDir => write!(
+                f,
+                "Could not determine config directory: neither XDG_CONFIG_HOME nor HOME is set"
+            ),
         }
     }
 }
