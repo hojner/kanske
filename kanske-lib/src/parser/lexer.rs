@@ -7,6 +7,7 @@ pub struct Lexer {
     pub input: String,
     pub position: usize,
     pub line: usize,
+    pending_token: Option<Token>,
 }
 
 impl Lexer {
@@ -15,6 +16,7 @@ impl Lexer {
             input,
             position: 0,
             line: 0,
+            pending_token: None,
         }
     }
 
@@ -22,6 +24,9 @@ impl Lexer {
         let mut tokens = Vec::new();
 
         loop {
+            if let Some(token) = self.pending_token.take() {
+                tokens.push(token);
+            }
             self.skip_whitespace_and_comments();
             if self.is_at_end() {
                 tokens.push(Token::Eof);
@@ -153,8 +158,8 @@ impl Lexer {
         let token = match name_string {
             "profile" => Token::Profile,
             "output" => Token::Output,
-            "exec" => Token::Exec,
-            "include" => Token::Include,
+            "exec" => return self.read_rest_of_line_token(Token::Exec),
+            "include" => return self.read_rest_of_line_token(Token::Include),
             "enable" => Token::Enabled(true),
             "disable" => Token::Enabled(false),
             "mode" => Token::Mode,
@@ -186,6 +191,22 @@ impl Lexer {
                 _ => break,
             }
         }
+    }
+
+    /// After recognizing a keyword like `exec` or `include`, consume the rest
+    /// of the line as a trailing string argument and emit both tokens.
+    fn read_rest_of_line_token(&mut self, keyword: Token) -> ParseResult<Token> {
+        // Skip whitespace (but not newlines) between keyword and argument
+        while !self.is_at_end() && matches!(self.peek(), ' ' | '\t' | '\r') {
+            self.advance();
+        }
+        let start = self.position;
+        while !self.is_at_end() && self.peek() != '\n' {
+            self.advance();
+        }
+        let value = self.input[start..self.position].trim_end().to_string();
+        self.pending_token = Some(Token::String(value));
+        Ok(keyword)
     }
 
     fn advance(&mut self) {

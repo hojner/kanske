@@ -26,6 +26,19 @@ probably full of bugs and logic errors. Don't use it unless you feel ok with
 that. I take no responsibility for complications to your setup as a result of
 using this app.
 
+## The safety
+
+Kanske offers some safety improvements. Apart from Rust's built-in memory safety
+guarantees, the app will trigger notify-send if the config file is not owned by
+current user or root or if it is group- or world-writable. This is due to the
+exec and include directives that would offer an attack vector for executing
+shell commands. This is, of course, no guarantee that this vector can't be
+exploited but the notification offers some support to the user. This approach is
+used in other security critical daemons but, as far as I understand, not in
+Kanshi.
+
+There are, at the time of writing, no unsafe blocks in Kanske.
+
 ## The service enabling
 
 Kanske is a long-running daemon, so you'll typically want to start it

@@ -4,7 +4,10 @@ use kanske_lib::{
     AppResult, KanskeState,
     applier::find_and_apply_profile,
     error::KanskeError,
-    parser::{ast::Config, config_parser::parse_file},
+    parser::{
+        ast::{Config, ExecDirective},
+        config_parser::parse_file,
+    },
 };
 use tracing::{debug, info, warn};
 use wayland_client::{Connection, EventQueue, QueueHandle};
@@ -102,7 +105,7 @@ fn event_loop(
             info!("Display hotplug detected");
             debug!(previous_serial = ?last_serial, new_serial = ?state.serial, heads = state.heads.len());
             match find_and_apply_profile(state, queue_handle, config) {
-                Ok(()) => {}
+                Ok(execs) => run_exec_commands(&execs),
                 Err(e @ (KanskeError::ManagerNotAvailable | KanskeError::NoSerial)) => {
                     return Err(e);
                 }
@@ -114,6 +117,24 @@ fn event_loop(
             // so we don't re-trigger on our own configuration change.
             event_queue.roundtrip(state)?;
             last_serial = state.serial;
+        }
+    }
+}
+
+fn run_exec_commands(execs: &[ExecDirective]) {
+    for exec in execs {
+        info!(command = %exec.command, "Running exec command");
+        match process::Command::new("sh")
+            .arg("-c")
+            .arg(&exec.command)
+            .spawn()
+        {
+            Ok(child) => {
+                debug!(pid = child.id(), command = %exec.command, "Spawned exec process");
+            }
+            Err(e) => {
+                warn!(command = %exec.command, error = %e, "Failed to spawn exec command");
+            }
         }
     }
 }

@@ -12,15 +12,17 @@ use crate::{
     AppResult, KanskeState,
     error::KanskeError,
     matcher::find_matching_profile,
-    parser::ast::{Config, OutputCommand, OutputConfig, OutputDesc},
+    parser::ast::{Config, ExecDirective, OutputCommand, OutputConfig, OutputDesc},
     wayland_interface::HeadInfo,
 };
 
+/// Finds a matching profile and applies its output configuration.
+/// Returns the list of exec directives from the matched profile (empty if no match).
 pub fn find_and_apply_profile(
     state: &mut KanskeState,
     qh: &QueueHandle<KanskeState>,
     config: &Config,
-) -> AppResult<()> {
+) -> AppResult<Vec<ExecDirective>> {
     if let Some(profile) = find_matching_profile(&state.heads, config) {
         info!(profile = ?profile.name, "Applying profile");
         let mut used_indicies: HashSet<usize> = HashSet::new();
@@ -70,11 +72,10 @@ pub fn find_and_apply_profile(
             configure_head(output, &output_configuration, current_head, qh)?;
         }
         output_configuration.apply();
+        Ok(profile.execs.clone())
     } else {
-        return Ok(());
+        Ok(Vec::new())
     }
-
-    Ok(())
 }
 
 fn configure_head(
@@ -118,19 +119,16 @@ fn apply_command(
             height,
             frequency,
         } => {
-            let mode_info = current_head
-                .modes
-                .iter()
-                .find(|m| {
-                    m.width == *width as i32
-                        && m.height == *height as i32
-                        && if let Some(f) = frequency {
-                            let requested = (f * 1000.0) as i32;
-                            (m.refresh - requested).abs() < 500
-                        } else {
-                            true
-                        }
-                });
+            let mode_info = current_head.modes.iter().find(|m| {
+                m.width == *width as i32
+                    && m.height == *height as i32
+                    && if let Some(f) = frequency {
+                        let requested = (f * 1000.0) as i32;
+                        (m.refresh - requested).abs() < 500
+                    } else {
+                        true
+                    }
+            });
 
             match mode_info {
                 Some(m) => {

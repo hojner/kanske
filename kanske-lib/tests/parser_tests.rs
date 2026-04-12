@@ -353,11 +353,10 @@ profile second {
 }
 
 // ============================================================================
-// UNIMPLEMENTED FEATURES (These should fail until implemented)
+// EXEC DIRECTIVE TESTS
 // ============================================================================
 
 #[test]
-//#[ignore] // Remove this when exec is implemented
 fn test_parse_exec_directive() {
     let input = r#"
 profile test {
@@ -380,7 +379,80 @@ profile test {
 }
 
 #[test]
-//#[ignore] // Remove this when include is implemented
+fn test_parse_exec_complex_command() {
+    let input = r#"
+profile test {
+    output eDP-1 enable
+    exec swaymsg workspace 1, move workspace to eDP-1
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
+
+    match &config.items[0] {
+        ConfigItem::Profile(p) => {
+            assert_eq!(p.execs.len(), 1);
+            assert_eq!(
+                p.execs[0].command,
+                "swaymsg workspace 1, move workspace to eDP-1"
+            );
+        }
+        _ => panic!("Expected Profile"),
+    }
+}
+
+#[test]
+fn test_parse_exec_shell_chain() {
+    let input = r#"
+profile test {
+    output eDP-1 enable
+    exec echo hello && echo world
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
+
+    match &config.items[0] {
+        ConfigItem::Profile(p) => {
+            assert_eq!(p.execs[0].command, "echo hello && echo world");
+        }
+        _ => panic!("Expected Profile"),
+    }
+}
+
+#[test]
+fn test_parse_multiple_exec_directives() {
+    let input = r#"
+profile test {
+    output eDP-1 enable
+    exec notify-send "activated"
+    exec swaymsg reload
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
+
+    match &config.items[0] {
+        ConfigItem::Profile(p) => {
+            assert_eq!(p.execs.len(), 2);
+            assert_eq!(p.execs[0].command, "notify-send \"activated\"");
+            assert_eq!(p.execs[1].command, "swaymsg reload");
+        }
+        _ => panic!("Expected Profile"),
+    }
+}
+
+// ============================================================================
+// INCLUDE DIRECTIVE TESTS
+// ============================================================================
+
+#[test]
 fn test_parse_include_directive() {
     let input = r#"
 include ~/.config/kanshi/extra.conf
@@ -397,6 +469,27 @@ profile test {
     match &config.items[0] {
         ConfigItem::Include(inc) => {
             assert_eq!(inc.path, "~/.config/kanshi/extra.conf");
+        }
+        _ => panic!("Expected Include"),
+    }
+}
+
+#[test]
+fn test_parse_include_glob_pattern() {
+    let input = r#"
+include /etc/kanske/conf.d/*.conf
+profile test {
+    output eDP-1 enable
+}
+"#;
+    let mut lexer = Lexer::new(input.to_string());
+    let tokens = lexer.tokenizer().unwrap();
+    let mut parser = Parser::new(tokens);
+    let config = parser.parse().unwrap();
+
+    match &config.items[0] {
+        ConfigItem::Include(inc) => {
+            assert_eq!(inc.path, "/etc/kanske/conf.d/*.conf");
         }
         _ => panic!("Expected Include"),
     }

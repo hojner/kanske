@@ -47,6 +47,13 @@ pub enum ConfigParseError {
     MissingProfileName {
         position: usize,
     },
+    IncludeError {
+        path: String,
+        reason: String,
+    },
+    IncludeDepthExceeded {
+        path: String,
+    },
     UnexpectedCharacter {
         character: char,
         position: usize,
@@ -157,6 +164,16 @@ impl std::fmt::Display for ConfigParseError {
             }
             ConfigParseError::MissingProfileName { position } => {
                 write!(f, "Missing profile name at position {}", position)
+            }
+            ConfigParseError::IncludeError { path, reason } => {
+                write!(f, "Include error for '{}': {}", path, reason)
+            }
+            ConfigParseError::IncludeDepthExceeded { path } => {
+                write!(
+                    f,
+                    "Include depth limit exceeded (max 10) while including '{}'",
+                    path
+                )
             }
             ConfigParseError::UnexpectedCharacter {
                 character,

@@ -2,7 +2,8 @@ use std::mem::discriminant;
 
 use crate::error::{ConfigParseError, ParseResult};
 use crate::parser::ast::{
-    Config, ConfigItem, OutputCommand, OutputConfig, OutputDesc, Profile, Transform,
+    Config, ConfigItem, ExecDirective, IncludeDirective, OutputCommand, OutputConfig, OutputDesc,
+    Profile, Transform,
 };
 use crate::parser::token::Token;
 
@@ -24,7 +25,7 @@ impl Parser {
         while !self.is_at_end() {
             config_item = match &self.tokens[self.current] {
                 Token::Profile => self.parse_profile()?,
-                // Token::Include => ConfigItem::Include(self.parse_include()),
+                Token::Include => ConfigItem::Include(self.parse_include()?),
                 Token::Output => ConfigItem::Output(self.parse_output()?),
                 Token::Eof => break,
                 other => {
@@ -67,7 +68,9 @@ impl Parser {
                 Token::Output => {
                     profile.outputs.push(self.parse_output()?);
                 }
-                Token::Exec => todo!(),
+                Token::Exec => {
+                    profile.execs.push(self.parse_exec()?);
+                }
                 Token::RightBrace => {
                     self.advance();
                     break;
@@ -364,6 +367,44 @@ impl Parser {
             });
         }
         Ok(())
+    }
+
+    fn parse_exec(&mut self) -> ParseResult<ExecDirective> {
+        self.validate(&Token::Exec)?;
+        self.advance();
+
+        let command = match &self.tokens[self.current] {
+            Token::String(s) => s.clone(),
+            other => {
+                return Err(ConfigParseError::UnexpectedToken {
+                    expected: "exec command string".to_string(),
+                    found: format!("{:?}", other),
+                    position: self.current,
+                });
+            }
+        };
+        self.advance();
+
+        Ok(ExecDirective { command })
+    }
+
+    fn parse_include(&mut self) -> ParseResult<IncludeDirective> {
+        self.validate(&Token::Include)?;
+        self.advance();
+
+        let path = match &self.tokens[self.current] {
+            Token::String(s) => s.clone(),
+            other => {
+                return Err(ConfigParseError::UnexpectedToken {
+                    expected: "include path".to_string(),
+                    found: format!("{:?}", other),
+                    position: self.current,
+                });
+            }
+        };
+        self.advance();
+
+        Ok(IncludeDirective { path })
     }
 
     fn is_at_end(&self) -> bool {
