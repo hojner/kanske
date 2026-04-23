@@ -1,11 +1,39 @@
 use tracing::{debug, info, trace, warn};
 
-use crate::KanskeState;
-use wayland_client::{Connection, Dispatch, QueueHandle, protocol::wl_registry};
+use crate::{AppResult, KanskeState};
+use wayland_client::{Connection, Dispatch, EventQueue, QueueHandle, protocol::wl_registry};
 use wayland_protocols_wlr::output_management::v1::client::{
     zwlr_output_configuration_head_v1, zwlr_output_configuration_v1, zwlr_output_head_v1,
     zwlr_output_manager_v1, zwlr_output_mode_v1,
 };
+
+pub fn wayland_setup() -> AppResult<(
+    KanskeState,
+    EventQueue<KanskeState>,
+    QueueHandle<KanskeState>,
+)> {
+    let wayland_connection = Connection::connect_to_env()?;
+    debug!("Wayland connection established");
+    let mut event_queue = wayland_connection.new_event_queue();
+    let queue_handle: QueueHandle<KanskeState> = event_queue.handle();
+
+    let mut state = KanskeState {
+        manager: None,
+        heads: Vec::new(),
+        serial: None,
+    };
+    wayland_connection.display().get_registry(&queue_handle, ());
+
+    // Decision: Making two roundtrips will give us the initial state of
+    // the app. It's not pretty but gets the job done, and seems to be the
+    // prefered option for many production apps. For now it's good
+    // enough, might be handled in a while !ready loop later.
+    event_queue.roundtrip(&mut state)?;
+    event_queue.roundtrip(&mut state)?;
+    debug!(heads = state.heads.len(), serial = ?state.serial, "Initial roundtrip complete");
+
+    Ok((state, event_queue, queue_handle))
+}
 
 #[derive(Debug, Clone)]
 pub struct HeadInfo {
@@ -24,6 +52,30 @@ pub struct ModeInfo {
     pub width: i32,
     pub height: i32,
     pub refresh: i32,
+}
+
+impl std::fmt::Display for HeadInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)?;
+        if self.enabled {
+            if let Some(ref mode) = self.current_mode {
+                write!(
+                    f,
+                    " using mode {}x{}@{:.1}Hz",
+                    mode.width,
+                    mode.height,
+                    mode.refresh as f64 / 1000.0
+                )?;
+            }
+            if let Some((x, y)) = self.position {
+                write!(f, " in position {},{}", x, y)?;
+            }
+        } else {
+            write!(f, " disabled")?;
+        }
+        write!(f, "\n")?;
+        Ok(())
+    }
 }
 
 impl Dispatch<wl_registry::WlRegistry, ()> for KanskeState {
@@ -102,7 +154,11 @@ impl Dispatch<zwlr_output_head_v1::ZwlrOutputHeadV1, ()> for KanskeState {
         _qh: &QueueHandle<Self>,
     ) {
         if let zwlr_output_head_v1::Event::Finished = event {
-            let name = state.heads.iter().find(|h| &h.head == head).map(|h| h.name.clone());
+            let name = state
+                .heads
+                .iter()
+                .find(|h| &h.head == head)
+                .map(|h| h.name.clone());
             debug!(head = ?name, "Head removed");
             state.heads.retain(|h| &h.head != head);
             return;

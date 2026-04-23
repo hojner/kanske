@@ -1,4 +1,5 @@
-use std::{env, fs, path::PathBuf, process};
+use std::path::PathBuf;
+use std::{env, fs, process};
 
 use kanske_lib::{
     AppResult, KanskeState,
@@ -8,17 +9,19 @@ use kanske_lib::{
         ast::{Config, ExecDirective},
         config_parser::parse_file,
     },
+    wayland_interface::wayland_setup,
 };
 use tracing::{debug, info, warn};
-use wayland_client::{Connection, EventQueue, QueueHandle};
+use wayland_client::{EventQueue, QueueHandle};
 
 const DEFAULT_CONFIG: &str = include_str!("../default_config");
 
 fn main() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("kanske=info,kanske_lib=info")),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                tracing_subscriber::EnvFilter::new("kanske=info,kanske_lib=info")
+            }),
         )
         .try_init();
 
@@ -63,34 +66,6 @@ fn config_path() -> AppResult<PathBuf> {
     Ok(config_dir.join("kanske").join("config"))
 }
 
-fn wayland_setup() -> AppResult<(
-    KanskeState,
-    EventQueue<KanskeState>,
-    QueueHandle<KanskeState>,
-)> {
-    let wayland_connection = Connection::connect_to_env()?;
-    debug!("Wayland connection established");
-    let mut event_queue = wayland_connection.new_event_queue();
-    let queue_handle: QueueHandle<KanskeState> = event_queue.handle();
-
-    let mut state = KanskeState {
-        manager: None,
-        heads: Vec::new(),
-        serial: None,
-    };
-    wayland_connection.display().get_registry(&queue_handle, ());
-
-    // Decision: Making two roundtrips will give us the initial state of
-    // the app. It's not pretty but gets the job done, and seems to be the
-    // prefered option for many production apps. For now it's good
-    // enough, might be handled in a while !ready loop later.
-    event_queue.roundtrip(&mut state)?;
-    event_queue.roundtrip(&mut state)?;
-    debug!(heads = state.heads.len(), serial = ?state.serial, "Initial roundtrip complete");
-
-    Ok((state, event_queue, queue_handle))
-}
-
 fn event_loop(
     state: &mut KanskeState,
     event_queue: &mut EventQueue<KanskeState>,
@@ -101,6 +76,7 @@ fn event_loop(
 
     loop {
         event_queue.blocking_dispatch(state)?;
+
         if state.serial != last_serial {
             info!("Display hotplug detected");
             debug!(previous_serial = ?last_serial, new_serial = ?state.serial, heads = state.heads.len());

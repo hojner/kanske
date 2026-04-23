@@ -9,8 +9,14 @@ pub enum KanskeError {
     WaylandDispatchError(wayland_client::DispatchError),
     ManagerNotAvailable,
     NoSerial,
-    HeadNotFound { name: String },
-    ModeNotFound { head: String, width: u32, height: u32 },
+    HeadNotFound {
+        name: String,
+    },
+    ModeNotFound {
+        head: String,
+        width: u32,
+        height: u32,
+    },
     NoConfigDir,
 }
 
@@ -103,8 +109,16 @@ impl std::fmt::Display for KanskeError {
             KanskeError::HeadNotFound { name } => {
                 write!(f, "Output head not found: {}", name)
             }
-            KanskeError::ModeNotFound { head, width, height } => {
-                write!(f, "Mode {}x{} not available on head {}", width, height, head)
+            KanskeError::ModeNotFound {
+                head,
+                width,
+                height,
+            } => {
+                write!(
+                    f,
+                    "Mode {}x{} not available on head {}",
+                    width, height, head
+                )
             }
             KanskeError::NoConfigDir => write!(
                 f,
