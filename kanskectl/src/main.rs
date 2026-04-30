@@ -27,7 +27,7 @@ fn main() {
 }
 
 fn list_outputs() -> AppResult<()> {
-    let (state, _event_queue, _queue_handle) = wayland_setup()?;
+    let (state, _connection, _event_queue, _queue_handle) = wayland_setup()?;
     // dbg!(&state);
 
     for head in state.heads {

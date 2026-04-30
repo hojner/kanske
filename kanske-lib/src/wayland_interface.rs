@@ -1,6 +1,6 @@
 use tracing::{debug, info, trace, warn};
 
-use crate::{AppResult, KanskeState};
+use crate::{AppResult, WaylandState};
 use wayland_client::{Connection, Dispatch, EventQueue, QueueHandle, protocol::wl_registry};
 use wayland_protocols_wlr::output_management::v1::client::{
     zwlr_output_configuration_head_v1, zwlr_output_configuration_v1, zwlr_output_head_v1,
@@ -8,16 +8,17 @@ use wayland_protocols_wlr::output_management::v1::client::{
 };
 
 pub fn wayland_setup() -> AppResult<(
-    KanskeState,
-    EventQueue<KanskeState>,
-    QueueHandle<KanskeState>,
+    WaylandState,
+    Connection,
+    EventQueue<WaylandState>,
+    QueueHandle<WaylandState>,
 )> {
     let wayland_connection = Connection::connect_to_env()?;
     debug!("Wayland connection established");
     let mut event_queue = wayland_connection.new_event_queue();
-    let queue_handle: QueueHandle<KanskeState> = event_queue.handle();
+    let queue_handle: QueueHandle<WaylandState> = event_queue.handle();
 
-    let mut state = KanskeState {
+    let mut state = WaylandState {
         manager: None,
         heads: Vec::new(),
         serial: None,
@@ -32,7 +33,7 @@ pub fn wayland_setup() -> AppResult<(
     event_queue.roundtrip(&mut state)?;
     debug!(heads = state.heads.len(), serial = ?state.serial, "Initial roundtrip complete");
 
-    Ok((state, event_queue, queue_handle))
+    Ok((state, wayland_connection, event_queue, queue_handle))
 }
 
 #[derive(Debug, Clone)]
@@ -78,7 +79,7 @@ impl std::fmt::Display for HeadInfo {
     }
 }
 
-impl Dispatch<wl_registry::WlRegistry, ()> for KanskeState {
+impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
     fn event(
         state: &mut Self,
         registry: &wl_registry::WlRegistry,
@@ -106,7 +107,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for KanskeState {
     }
 }
 
-impl Dispatch<zwlr_output_manager_v1::ZwlrOutputManagerV1, ()> for KanskeState {
+impl Dispatch<zwlr_output_manager_v1::ZwlrOutputManagerV1, ()> for WaylandState {
     fn event(
         state: &mut Self,
         _: &zwlr_output_manager_v1::ZwlrOutputManagerV1,
@@ -139,12 +140,12 @@ impl Dispatch<zwlr_output_manager_v1::ZwlrOutputManagerV1, ()> for KanskeState {
         }
     }
 
-    wayland_client::event_created_child!(KanskeState, zwlr_output_manager_v1::ZwlrOutputManagerV1, [
+    wayland_client::event_created_child!(WaylandState, zwlr_output_manager_v1::ZwlrOutputManagerV1, [
         zwlr_output_manager_v1::EVT_HEAD_OPCODE => (zwlr_output_head_v1::ZwlrOutputHeadV1, ())
     ]);
 }
 
-impl Dispatch<zwlr_output_head_v1::ZwlrOutputHeadV1, ()> for KanskeState {
+impl Dispatch<zwlr_output_head_v1::ZwlrOutputHeadV1, ()> for WaylandState {
     fn event(
         state: &mut Self,
         head: &zwlr_output_head_v1::ZwlrOutputHeadV1,
@@ -209,12 +210,12 @@ impl Dispatch<zwlr_output_head_v1::ZwlrOutputHeadV1, ()> for KanskeState {
         }
     }
 
-    wayland_client::event_created_child!(KanskeState, zwlr_output_head_v1::ZwlrOutputHeadV1, [
+    wayland_client::event_created_child!(WaylandState, zwlr_output_head_v1::ZwlrOutputHeadV1, [
         zwlr_output_head_v1::EVT_MODE_OPCODE => (zwlr_output_mode_v1::ZwlrOutputModeV1, ())
     ]);
 }
 
-impl Dispatch<zwlr_output_mode_v1::ZwlrOutputModeV1, ()> for KanskeState {
+impl Dispatch<zwlr_output_mode_v1::ZwlrOutputModeV1, ()> for WaylandState {
     fn event(
         state: &mut Self,
         mode_obj: &zwlr_output_mode_v1::ZwlrOutputModeV1,
@@ -240,7 +241,7 @@ impl Dispatch<zwlr_output_mode_v1::ZwlrOutputModeV1, ()> for KanskeState {
     }
 }
 
-impl Dispatch<zwlr_output_configuration_v1::ZwlrOutputConfigurationV1, ()> for KanskeState {
+impl Dispatch<zwlr_output_configuration_v1::ZwlrOutputConfigurationV1, ()> for WaylandState {
     fn event(
         _state: &mut Self,
         _: &zwlr_output_configuration_v1::ZwlrOutputConfigurationV1,
@@ -265,7 +266,7 @@ impl Dispatch<zwlr_output_configuration_v1::ZwlrOutputConfigurationV1, ()> for K
 }
 
 impl Dispatch<zwlr_output_configuration_head_v1::ZwlrOutputConfigurationHeadV1, ()>
-    for KanskeState
+    for WaylandState
 {
     fn event(
         _: &mut Self,

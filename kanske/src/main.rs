@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::{env, fs, process};
 
 use kanske_lib::{
-    AppResult, KanskeState,
+    AppResult, WaylandState,
     applier::find_and_apply_profile,
     error::KanskeError,
     parser::{
@@ -36,7 +36,7 @@ fn run() -> AppResult<()> {
     ensure_config(&config_file)?;
     info!(config = %config_file.display(), "Loading config");
     let config = parse_file(config_file)?;
-    let (mut state, mut event_queue, queue_handle) = wayland_setup()?;
+    let (mut state, _, mut event_queue, queue_handle) = wayland_setup()?;
 
     info!("Monitoring for display changes...");
 
@@ -67,9 +67,9 @@ fn config_path() -> AppResult<PathBuf> {
 }
 
 fn event_loop(
-    state: &mut KanskeState,
-    event_queue: &mut EventQueue<KanskeState>,
-    queue_handle: &QueueHandle<KanskeState>,
+    state: &mut WaylandState,
+    event_queue: &mut EventQueue<WaylandState>,
+    queue_handle: &QueueHandle<WaylandState>,
     config: &Config,
 ) -> AppResult<()> {
     let mut last_serial = state.serial;

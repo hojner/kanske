@@ -9,7 +9,7 @@ use wayland_protocols_wlr::output_management::v1::client::{
 };
 
 use crate::{
-    AppResult, KanskeState,
+    AppResult, WaylandState,
     error::KanskeError,
     matcher::find_matching_profile,
     parser::ast::{Config, ExecDirective, OutputCommand, OutputConfig, OutputDesc},
@@ -19,8 +19,8 @@ use crate::{
 /// Finds a matching profile and applies its output configuration.
 /// Returns the list of exec directives from the matched profile (empty if no match).
 pub fn find_and_apply_profile(
-    state: &mut KanskeState,
-    qh: &QueueHandle<KanskeState>,
+    state: &mut WaylandState,
+    qh: &QueueHandle<WaylandState>,
     config: &Config,
 ) -> AppResult<Vec<ExecDirective>> {
     if let Some(profile) = find_matching_profile(&state.heads, config) {
@@ -82,7 +82,7 @@ fn configure_head(
     output: &OutputConfig,
     output_configuration: &ZwlrOutputConfigurationV1,
     current_head: &HeadInfo,
-    qh: &QueueHandle<KanskeState>,
+    qh: &QueueHandle<WaylandState>,
 ) -> AppResult<()> {
     let is_enabled = output
         .commands

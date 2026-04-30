@@ -17,6 +17,7 @@ pub enum KanskeError {
         width: u32,
         height: u32,
     },
+    CalloopError(String),
     NoConfigDir,
 }
 
@@ -120,6 +121,7 @@ impl std::fmt::Display for KanskeError {
                     width, height, head
                 )
             }
+            KanskeError::CalloopError(s) => write!(f, "Calloop error: {}", s),
             KanskeError::NoConfigDir => write!(
                 f,
                 "Could not determine config directory: neither XDG_CONFIG_HOME nor HOME is set"
