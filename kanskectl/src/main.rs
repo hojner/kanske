@@ -1,5 +1,8 @@
 use clap::{Parser, Subcommand};
-use kanske_lib::{AppResult, wayland_interface::wayland_setup};
+use kanske_lib::{
+    AppResult,
+    wayland_interface::{WaylandState, connect},
+};
 
 #[derive(Parser)]
 #[command(name = "kanskectl", version, about)]
@@ -27,8 +30,14 @@ fn main() {
 }
 
 fn list_outputs() -> AppResult<()> {
-    let (state, _connection, _event_queue, _queue_handle) = wayland_setup()?;
-    // dbg!(&state);
+    let (_connection, mut event_queue, _qh) = connect::<WaylandState>()?;
+    let mut state = WaylandState {
+        manager: None,
+        heads: Vec::new(),
+        serial: None,
+    };
+    event_queue.roundtrip(&mut state)?;
+    event_queue.roundtrip(&mut state)?;
 
     for head in state.heads {
         print!("{}", head);

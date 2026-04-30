@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use tracing::{debug, error, info};
-use wayland_client::{QueueHandle, protocol::wl_output};
+use wayland_client::{Dispatch, QueueHandle, protocol::wl_output};
 use wayland_protocols_wlr::output_management::v1::client::{
     zwlr_output_configuration_head_v1::ZwlrOutputConfigurationHeadV1,
     zwlr_output_configuration_v1::ZwlrOutputConfigurationV1,
@@ -9,20 +9,25 @@ use wayland_protocols_wlr::output_management::v1::client::{
 };
 
 use crate::{
-    AppResult, WaylandState,
+    AppResult,
     error::KanskeError,
     matcher::find_matching_profile,
     parser::ast::{Config, ExecDirective, OutputCommand, OutputConfig, OutputDesc},
-    wayland_interface::HeadInfo,
+    wayland_interface::{HeadInfo, WaylandState},
 };
 
 /// Finds a matching profile and applies its output configuration.
 /// Returns the list of exec directives from the matched profile (empty if no match).
-pub fn find_and_apply_profile(
+pub fn find_and_apply_profile<D>(
     state: &mut WaylandState,
-    qh: &QueueHandle<WaylandState>,
+    qh: &QueueHandle<D>,
     config: &Config,
-) -> AppResult<Vec<ExecDirective>> {
+) -> AppResult<Vec<ExecDirective>>
+where
+    D: Dispatch<ZwlrOutputConfigurationV1, ()>
+        + Dispatch<ZwlrOutputConfigurationHeadV1, ()>
+        + 'static,
+{
     if let Some(profile) = find_matching_profile(&state.heads, config) {
         info!(profile = ?profile.name, "Applying profile");
         let mut used_indicies: HashSet<usize> = HashSet::new();
@@ -78,12 +83,17 @@ pub fn find_and_apply_profile(
     }
 }
 
-fn configure_head(
+fn configure_head<D>(
     output: &OutputConfig,
     output_configuration: &ZwlrOutputConfigurationV1,
     current_head: &HeadInfo,
-    qh: &QueueHandle<WaylandState>,
-) -> AppResult<()> {
+    qh: &QueueHandle<D>,
+) -> AppResult<()>
+where
+    D: Dispatch<ZwlrOutputConfigurationV1, ()>
+        + Dispatch<ZwlrOutputConfigurationHeadV1, ()>
+        + 'static,
+{
     let is_enabled = output
         .commands
         .iter()

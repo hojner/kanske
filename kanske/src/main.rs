@@ -1,18 +1,21 @@
+pub mod exec;
+pub mod state;
+
 use std::path::PathBuf;
 use std::{env, fs, process};
 
 use kanske_lib::{
-    AppResult, WaylandState,
+    AppResult,
     applier::find_and_apply_profile,
     error::KanskeError,
-    parser::{
-        ast::{Config, ExecDirective},
-        config_parser::parse_file,
-    },
-    wayland_interface::wayland_setup,
+    parser::{ast::Config, config_parser::parse_file},
+    wayland_interface::{WaylandState, connect},
 };
 use tracing::{debug, info, warn};
 use wayland_client::{EventQueue, QueueHandle};
+
+use crate::exec::run_exec_commands;
+use crate::state::KanskeState;
 
 const DEFAULT_CONFIG: &str = include_str!("../default_config");
 
@@ -36,11 +39,24 @@ fn run() -> AppResult<()> {
     ensure_config(&config_file)?;
     info!(config = %config_file.display(), "Loading config");
     let config = parse_file(config_file)?;
-    let (mut state, _, mut event_queue, queue_handle) = wayland_setup()?;
+    let (_connection, mut event_queue, qh) = connect::<KanskeState>()?;
+
+    let mut state = KanskeState {
+        wayland: WaylandState {
+            manager: None,
+            heads: Vec::new(),
+            serial: None,
+        },
+        config: config.clone(),
+        queue_handle: qh.clone(),
+        last_serial: None,
+    };
+    event_queue.roundtrip(&mut state)?;
+    event_queue.roundtrip(&mut state)?;
 
     info!("Monitoring for display changes...");
 
-    event_loop(&mut state, &mut event_queue, &queue_handle, &config)
+    event_loop(&mut state, &mut event_queue, &qh, &config)
 }
 
 fn ensure_config(path: &PathBuf) -> AppResult<()> {
@@ -67,20 +83,18 @@ fn config_path() -> AppResult<PathBuf> {
 }
 
 fn event_loop(
-    state: &mut WaylandState,
-    event_queue: &mut EventQueue<WaylandState>,
-    queue_handle: &QueueHandle<WaylandState>,
+    state: &mut KanskeState,
+    event_queue: &mut EventQueue<KanskeState>,
+    queue_handle: &QueueHandle<KanskeState>,
     config: &Config,
 ) -> AppResult<()> {
-    let mut last_serial = state.serial;
-
     loop {
         event_queue.blocking_dispatch(state)?;
 
-        if state.serial != last_serial {
+        if state.wayland.serial != state.last_serial {
             info!("Display hotplug detected");
-            debug!(previous_serial = ?last_serial, new_serial = ?state.serial, heads = state.heads.len());
-            match find_and_apply_profile(state, queue_handle, config) {
+            debug!(previous_serial = ?state.last_serial, new_serial = ?state.wayland.serial, heads = state.wayland.heads.len());
+            match find_and_apply_profile(&mut state.wayland, queue_handle, config) {
                 Ok(execs) => run_exec_commands(&execs),
                 Err(e @ (KanskeError::ManagerNotAvailable | KanskeError::NoSerial)) => {
                     return Err(e);
@@ -92,25 +106,7 @@ fn event_loop(
             // Drain events from our own apply (Succeeded/Failed + new Done serial)
             // so we don't re-trigger on our own configuration change.
             event_queue.roundtrip(state)?;
-            last_serial = state.serial;
-        }
-    }
-}
-
-fn run_exec_commands(execs: &[ExecDirective]) {
-    for exec in execs {
-        info!(command = %exec.command, "Running exec command");
-        match process::Command::new("sh")
-            .arg("-c")
-            .arg(&exec.command)
-            .spawn()
-        {
-            Ok(child) => {
-                debug!(pid = child.id(), command = %exec.command, "Spawned exec process");
-            }
-            Err(e) => {
-                warn!(command = %exec.command, error = %e, "Failed to spawn exec command");
-            }
+            state.last_serial = state.wayland.serial;
         }
     }
 }
