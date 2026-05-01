@@ -8,11 +8,11 @@ use kanske_lib::{
     AppResult,
     applier::find_and_apply_profile,
     error::KanskeError,
-    parser::{ast::Config, config_parser::parse_file},
+    parser::config_parser::parse_file,
     wayland_interface::{WaylandState, connect},
 };
 use tracing::{debug, info, warn};
-use wayland_client::{EventQueue, QueueHandle};
+use wayland_client::EventQueue;
 
 use crate::exec::run_exec_commands;
 use crate::state::KanskeState;
@@ -39,7 +39,7 @@ fn run() -> AppResult<()> {
     ensure_config(&config_file)?;
     info!(config = %config_file.display(), "Loading config");
     let config = parse_file(config_file)?;
-    let (_connection, mut event_queue, qh) = connect::<KanskeState>()?;
+    let (_connection, mut event_queue, queue_handle) = connect::<KanskeState>()?;
 
     let mut state = KanskeState {
         wayland: WaylandState {
@@ -47,8 +47,8 @@ fn run() -> AppResult<()> {
             heads: Vec::new(),
             serial: None,
         },
-        config: config.clone(),
-        queue_handle: qh.clone(),
+        config,
+        queue_handle,
         last_serial: None,
     };
     event_queue.roundtrip(&mut state)?;
@@ -56,7 +56,7 @@ fn run() -> AppResult<()> {
 
     info!("Monitoring for display changes...");
 
-    event_loop(&mut state, &mut event_queue, &qh, &config)
+    event_loop(&mut state, &mut event_queue)
 }
 
 fn ensure_config(path: &PathBuf) -> AppResult<()> {
@@ -82,19 +82,14 @@ fn config_path() -> AppResult<PathBuf> {
     Ok(config_dir.join("kanske").join("config"))
 }
 
-fn event_loop(
-    state: &mut KanskeState,
-    event_queue: &mut EventQueue<KanskeState>,
-    queue_handle: &QueueHandle<KanskeState>,
-    config: &Config,
-) -> AppResult<()> {
+fn event_loop(state: &mut KanskeState, event_queue: &mut EventQueue<KanskeState>) -> AppResult<()> {
     loop {
         event_queue.blocking_dispatch(state)?;
 
         if state.wayland.serial != state.last_serial {
             info!("Display hotplug detected");
             debug!(previous_serial = ?state.last_serial, new_serial = ?state.wayland.serial, heads = state.wayland.heads.len());
-            match find_and_apply_profile(&mut state.wayland, queue_handle, config) {
+            match find_and_apply_profile(&mut state.wayland, &state.queue_handle, &state.config) {
                 Ok(execs) => run_exec_commands(&execs),
                 Err(e @ (KanskeError::ManagerNotAvailable | KanskeError::NoSerial)) => {
                     return Err(e);
