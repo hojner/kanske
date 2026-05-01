@@ -1,7 +1,10 @@
 pub mod exec;
 pub mod state;
 
-use calloop::EventLoop;
+use calloop::{
+    EventLoop,
+    signals::{Signal, Signals},
+};
 use calloop_wayland_source::WaylandSource;
 use std::path::PathBuf;
 use std::{env, fs, process};
@@ -59,6 +62,7 @@ fn run() -> AppResult<()> {
     let mut event_loop: EventLoop<KanskeState> =
         EventLoop::try_new().map_err(|e| KanskeError::CalloopError(e.to_string()))?;
     let signal = event_loop.get_signal();
+    let signal_handle = signal.clone();
     let loop_handle = event_loop.handle();
 
     loop_handle
@@ -71,6 +75,26 @@ fn run() -> AppResult<()> {
                     signal.stop();
                 }
                 Ok(count)
+            },
+        )
+        .map_err(|e| KanskeError::CalloopError(e.to_string()))?;
+
+    let signals = [Signal::SIGHUP, Signal::SIGINT, Signal::SIGTERM];
+    loop_handle
+        .insert_source(
+            Signals::new(&signals).map_err(|e| KanskeError::CalloopError(e.to_string()))?,
+            move |signal_event, _meta, state| match signal_event.signal() {
+                Signal::SIGINT | Signal::SIGTERM => {
+                    info!(signal = ?signal_event.signal(), "Shutdown signal reveived");
+                    signal_handle.stop();
+                }
+                Signal::SIGHUP => {
+                    info!("SIGHUP received, reloading config");
+                    if let Err(e) = reload_config(state) {
+                        warn!("Config reload failed, keeping previous config: {}", e);
+                    }
+                }
+                _ => {}
             },
         )
         .map_err(|e| KanskeError::CalloopError(e.to_string()))?;

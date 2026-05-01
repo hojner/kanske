@@ -20,5 +20,5 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 clap = { version = "4.6", features = ["derive"] }
 nix = { version = "0.29", features = ["user"] }
-calloop = "0.14"
+calloop = { version = "0.14", features = ["signals"] }
 calloop-wayland-source = "0.4"
