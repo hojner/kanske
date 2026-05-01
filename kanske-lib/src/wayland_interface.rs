@@ -194,7 +194,7 @@ impl std::fmt::Display for HeadInfo {
         } else {
             write!(f, " disabled")?;
         }
-        write!(f, "\n")?;
+        writeln!(f)?;
         Ok(())
     }
 }

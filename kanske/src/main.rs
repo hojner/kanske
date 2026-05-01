@@ -1,6 +1,8 @@
 pub mod exec;
 pub mod state;
 
+use calloop::EventLoop;
+use calloop_wayland_source::WaylandSource;
 use std::path::PathBuf;
 use std::{env, fs, process};
 
@@ -39,7 +41,7 @@ fn run() -> AppResult<()> {
     ensure_config(&config_file)?;
     info!(config = %config_file.display(), "Loading config");
     let config = parse_file(config_file)?;
-    let (_connection, mut event_queue, queue_handle) = connect::<KanskeState>()?;
+    let (connection, mut event_queue, queue_handle) = connect::<KanskeState>()?;
 
     let mut state = KanskeState {
         wayland: WaylandState {
@@ -54,9 +56,33 @@ fn run() -> AppResult<()> {
     event_queue.roundtrip(&mut state)?;
     event_queue.roundtrip(&mut state)?;
 
+    let mut event_loop: EventLoop<KanskeState> =
+        EventLoop::try_new().map_err(|e| KanskeError::CalloopError(e.to_string()))?;
+    let signal = event_loop.get_signal();
+    let loop_handle = event_loop.handle();
+
+    loop_handle
+        .insert_source(
+            WaylandSource::new(connection, event_queue),
+            move |_event, queue, state| {
+                let count = queue.dispatch_pending(state)?;
+                if let Err(e) = apply_if_changed(state, queue) {
+                    warn!("Fatal apply error, stopping: {}", e);
+                    signal.stop();
+                }
+                Ok(count)
+            },
+        )
+        .map_err(|e| KanskeError::CalloopError(e.to_string()))?;
+
     info!("Monitoring for display changes...");
 
-    event_loop(&mut state, &mut event_queue)
+    event_loop
+        .run(None, &mut state, |_| {})
+        .map_err(|e| KanskeError::CalloopError(e.to_string()))?;
+
+    info!("Event loop exited");
+    Ok(())
 }
 
 fn ensure_config(path: &PathBuf) -> AppResult<()> {
@@ -68,6 +94,7 @@ fn ensure_config(path: &PathBuf) -> AppResult<()> {
     }
     fs::write(path, DEFAULT_CONFIG)?;
     info!(path = %path.display(), "Created default config file");
+
     Ok(())
 }
 
@@ -79,29 +106,28 @@ fn config_path() -> AppResult<PathBuf> {
             PathBuf::from(home).join(".config")
         }
     };
+
     Ok(config_dir.join("kanske").join("config"))
 }
 
-fn event_loop(state: &mut KanskeState, event_queue: &mut EventQueue<KanskeState>) -> AppResult<()> {
-    loop {
-        event_queue.blocking_dispatch(state)?;
+fn apply_if_changed(state: &mut KanskeState, queue: &mut EventQueue<KanskeState>) -> AppResult<()> {
+    if state.wayland.serial == state.last_serial || state.wayland.serial.is_none() {
+        return Ok(());
+    }
+    info!("Display hotplug detected");
+    debug!(previous_serial = ?state.last_serial, new_serial = ?state.wayland.serial, heads = state.wayland.heads.len());
 
-        if state.wayland.serial != state.last_serial {
-            info!("Display hotplug detected");
-            debug!(previous_serial = ?state.last_serial, new_serial = ?state.wayland.serial, heads = state.wayland.heads.len());
-            match find_and_apply_profile(&mut state.wayland, &state.queue_handle, &state.config) {
-                Ok(execs) => run_exec_commands(&execs),
-                Err(e @ (KanskeError::ManagerNotAvailable | KanskeError::NoSerial)) => {
-                    return Err(e);
-                }
-                Err(e) => {
-                    warn!("Profile apply failed: {}", e);
-                }
-            }
-            // Drain events from our own apply (Succeeded/Failed + new Done serial)
-            // so we don't re-trigger on our own configuration change.
-            event_queue.roundtrip(state)?;
-            state.last_serial = state.wayland.serial;
+    match find_and_apply_profile(&mut state.wayland, &state.queue_handle, &state.config) {
+        Ok(execs) => run_exec_commands(&execs),
+        Err(e @ (KanskeError::ManagerNotAvailable | KanskeError::NoSerial)) => {
+            return Err(e);
+        }
+        Err(e) => {
+            warn!("Profile apply failed: {}", e);
         }
     }
+    queue.roundtrip(state)?;
+    state.last_serial = state.wayland.serial;
+
+    Ok(())
 }
