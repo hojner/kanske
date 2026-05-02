@@ -45,7 +45,6 @@ fn profile_matches(heads: &[HeadInfo], profile: &Profile) -> bool {
 
     // Named outputs must each match a unique head
     for output in profile.outputs.iter() {
-        dbg!(&output);
         if let OutputDesc::Name(name) | OutputDesc::Description(name) = &output.desc {
             let found = heads
                 .iter()
