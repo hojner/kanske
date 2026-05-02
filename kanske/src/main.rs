@@ -14,6 +14,7 @@ use kanske_lib::{
     applier::find_and_apply_profile,
     error::KanskeError,
     parser::config_parser::parse_file,
+    paths::pid_file_path,
     wayland_interface::{WaylandState, connect},
 };
 use tracing::{debug, info, warn};
@@ -23,6 +24,13 @@ use crate::exec::run_exec_commands;
 use crate::state::KanskeState;
 
 const DEFAULT_CONFIG: &str = include_str!("../default_config");
+
+struct PidFailGuard(PathBuf);
+impl Drop for PidFailGuard {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
 
 fn main() {
     let _ = tracing_subscriber::fmt()
@@ -54,7 +62,9 @@ fn run() -> AppResult<()> {
         },
         config,
         queue_handle,
+        connection: connection.clone(),
         last_serial: None,
+        reload_pending: false,
     };
     event_queue.roundtrip(&mut state)?;
     event_queue.roundtrip(&mut state)?;
@@ -85,19 +95,28 @@ fn run() -> AppResult<()> {
             Signals::new(&signals).map_err(|e| KanskeError::CalloopError(e.to_string()))?,
             move |signal_event, _meta, state| match signal_event.signal() {
                 Signal::SIGINT | Signal::SIGTERM => {
-                    info!(signal = ?signal_event.signal(), "Shutdown signal reveived");
+                    info!(signal = ?signal_event.signal(), "Shutdown signal received");
                     signal_handle.stop();
                 }
                 Signal::SIGHUP => {
                     info!("SIGHUP received, reloading config");
                     if let Err(e) = reload_config(state) {
                         warn!("Config reload failed, keeping previous config: {}", e);
+                        return;
+                    }
+                    let _ = state.connection.display().sync(&state.queue_handle, ());
+                    if let Err(e) = state.connection.flush() {
+                        warn!("Failed to flush sync request: {}", e);
                     }
                 }
                 _ => {}
             },
         )
         .map_err(|e| KanskeError::CalloopError(e.to_string()))?;
+
+    let pid_path = pid_file_path()?;
+    fs::write(&pid_path, std::process::id().to_string())?;
+    let _pid_guard = PidFailGuard(pid_path.clone());
 
     info!("Monitoring for display changes...");
 
@@ -138,7 +157,12 @@ fn apply_if_changed(state: &mut KanskeState, queue: &mut EventQueue<KanskeState>
     if state.wayland.serial == state.last_serial || state.wayland.serial.is_none() {
         return Ok(());
     }
-    info!("Display hotplug detected");
+    let reason = if std::mem::take(&mut state.reload_pending) {
+        "Config reloaded"
+    } else {
+        "Display hotplug detected"
+    };
+    info!("{}", reason);
     debug!(previous_serial = ?state.last_serial, new_serial = ?state.wayland.serial, heads = state.wayland.heads.len());
 
     match find_and_apply_profile(&mut state.wayland, &state.queue_handle, &state.config) {
@@ -153,5 +177,14 @@ fn apply_if_changed(state: &mut KanskeState, queue: &mut EventQueue<KanskeState>
     queue.roundtrip(state)?;
     state.last_serial = state.wayland.serial;
 
+    Ok(())
+}
+
+fn reload_config(state: &mut KanskeState) -> AppResult<()> {
+    let config_file = config_path()?;
+    info!(config = %config_file.display(), "Reloading config");
+    state.config = parse_file(config_file)?;
+    state.reload_pending = true;
+    state.last_serial = None;
     Ok(())
 }

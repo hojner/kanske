@@ -1,6 +1,6 @@
 use kanske_lib::WaylandState;
 use kanske_lib::parser::ast::Config;
-use wayland_client::protocol::wl_registry;
+use wayland_client::protocol::{wl_callback, wl_registry};
 use wayland_client::{Connection, Dispatch, QueueHandle};
 use wayland_protocols_wlr::output_management::v1::client::zwlr_output_manager_v1::ZwlrOutputManagerV1;
 use wayland_protocols_wlr::output_management::v1::client::{
@@ -12,7 +12,9 @@ pub struct KanskeState {
     pub wayland: WaylandState,
     pub config: Config,
     pub queue_handle: QueueHandle<KanskeState>,
+    pub connection: Connection,
     pub last_serial: Option<u32>,
+    pub reload_pending: bool,
 }
 
 impl Dispatch<wl_registry::WlRegistry, ()> for KanskeState {
@@ -95,6 +97,18 @@ impl Dispatch<zwlr_output_configuration_head_v1::ZwlrOutputConfigurationHeadV1, 
         _: &mut Self,
         _: &zwlr_output_configuration_head_v1::ZwlrOutputConfigurationHeadV1,
         _: zwlr_output_configuration_head_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
+}
+
+impl Dispatch<wl_callback::WlCallback, ()> for KanskeState {
+    fn event(
+        _: &mut Self,
+        _: &wl_callback::WlCallback,
+        _: <wl_callback::WlCallback as wayland_client::Proxy>::Event,
         _: &(),
         _: &Connection,
         _: &QueueHandle<Self>,

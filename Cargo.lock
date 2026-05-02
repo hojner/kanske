@@ -332,6 +332,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "kanske-lib",
+ "nix 0.29.0",
 ]
 
 [[package]]

@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 kanske-lib = { path = "../kanske-lib" }
 clap.workspace = true
+nix = { workspace = true, features = ["signal"] }
 
 [[bin]]
 name = "kanskectl"

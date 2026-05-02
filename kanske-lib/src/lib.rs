@@ -3,6 +3,7 @@ pub mod composer;
 pub mod error;
 pub mod matcher;
 pub mod parser;
+pub mod paths;
 pub mod wayland_interface;
 
 pub use error::AppResult;

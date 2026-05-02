@@ -19,6 +19,9 @@ pub enum KanskeError {
     },
     CalloopError(String),
     NoConfigDir,
+    DaemonNotRunning,
+    InvalidPidFile,
+    SignalFailed(String),
 }
 
 #[derive(Debug)]
@@ -126,6 +129,11 @@ impl std::fmt::Display for KanskeError {
                 f,
                 "Could not determine config directory: neither XDG_CONFIG_HOME nor HOME is set"
             ),
+            KanskeError::DaemonNotRunning => {
+                write!(f, "The Kanske daemon does not seem to be running")
+            }
+            KanskeError::InvalidPidFile => write!(f, "The Kanske Pid file is invalid"),
+            KanskeError::SignalFailed(s) => write!(f, "kanskectl failed to send signal: {}", s),
         }
     }
 }
