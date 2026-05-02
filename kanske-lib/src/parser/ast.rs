@@ -2,6 +2,8 @@
 
 use wayland_client::protocol::wl_output;
 
+use crate::wayland_interface::HeadInfo;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub items: Vec<ConfigItem>,
@@ -34,13 +36,15 @@ impl Profile {
 #[derive(Debug, Clone, PartialEq)]
 pub enum OutputDesc {
     Name(String),
+    Description(String),
     Any,
 }
 
 impl OutputDesc {
-    pub fn matches(&self, head_name: &str) -> bool {
+    pub fn matches(&self, head: &HeadInfo) -> bool {
         match self {
-            OutputDesc::Name(n) => n == head_name,
+            OutputDesc::Name(n) => n == &head.name,
+            OutputDesc::Description(d) => d == &head.description,
             OutputDesc::Any => true,
         }
     }

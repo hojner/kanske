@@ -91,17 +91,19 @@ impl Parser {
         self.validate(&Token::Output)?;
         self.advance();
 
-        let desc = if let Token::Identifier(desc) = &self.tokens[self.current] {
-            match desc.as_str() {
+        let desc = match &self.tokens[self.current] {
+            Token::Identifier(s) => match s.as_str() {
                 "*" => OutputDesc::Any,
-                _ => OutputDesc::Name(desc.clone()),
+                _ => OutputDesc::Name(s.clone()),
+            },
+            Token::String(s) => OutputDesc::Description(s.clone()),
+            other => {
+                return Err(ConfigParseError::UnexpectedToken {
+                    expected: "output name".to_string(),
+                    found: format!("{:?}", other),
+                    position: self.current,
+                });
             }
-        } else {
-            return Err(ConfigParseError::UnexpectedToken {
-                expected: "output name".to_string(),
-                found: format!("{:?}", &self.tokens[self.current]),
-                position: self.current,
-            });
         };
 
         self.advance();

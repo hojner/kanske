@@ -45,11 +45,12 @@ fn profile_matches(heads: &[HeadInfo], profile: &Profile) -> bool {
 
     // Named outputs must each match a unique head
     for output in profile.outputs.iter() {
-        if let OutputDesc::Name(name) = &output.desc {
+        dbg!(&output);
+        if let OutputDesc::Name(name) | OutputDesc::Description(name) = &output.desc {
             let found = heads
                 .iter()
                 .enumerate()
-                .find(|(i, h)| !used[*i] && h.name == *name);
+                .find(|(i, h)| !used[*i] && output.desc.matches(h));
             match found {
                 Some((i, _)) => used[i] = true,
                 None => {

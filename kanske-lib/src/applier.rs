@@ -41,17 +41,18 @@ where
         for output in profile
             .outputs
             .iter()
-            .filter(|f| matches!(f.desc, OutputDesc::Name(_)))
+            .filter(|f| matches!(f.desc, OutputDesc::Name(_) | OutputDesc::Description(_)))
         {
             let position = state
                 .heads
                 .iter()
                 .enumerate()
-                .find(|(i, h)| !used_indicies.contains(i) && output.desc.matches(&h.name))
+                .find(|(i, h)| !used_indicies.contains(i) && output.desc.matches(&h))
                 .map(|(i, _)| i)
                 .ok_or_else(|| {
                     let name = match &output.desc {
                         OutputDesc::Name(n) => n.clone(),
+                        OutputDesc::Description(d) => d.clone(),
                         OutputDesc::Any => "*".to_string(),
                     };
                     KanskeError::HeadNotFound { name }
