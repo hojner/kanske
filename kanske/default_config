@@ -1,5 +1,5 @@
 # Kanske configuration
-# See https://github.com/patrikhojner/kanske for documentation
+# See https://github.com/hojner/kanske for documentation
 #
 # Define profiles that activate when specific monitors are connected.
 # Each profile lists outputs by name (from `swaymsg -t get_outputs` or similar).
@@ -17,3 +17,7 @@
 #
 # Output commands: enable, disable, mode, position, scale, transform, adaptive_sync
 # Wildcard output * matches any unmatched monitor.
+#
+# NOTE: kanske only supports one config location for now. Thats $XDG_CONFIG_HOME/kanske/config
+# NOTE: kanske does not yet support "...output *" with three dots notation which enables matching of any number of monitors.
+# NOTE: kanske only handles comments for entire lines, comment added after any other characters will most likely cause errors.  
