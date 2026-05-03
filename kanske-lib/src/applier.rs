@@ -47,7 +47,7 @@ where
                 .heads
                 .iter()
                 .enumerate()
-                .find(|(i, h)| !used_indices.contains(i) && output.desc.matches(&h))
+                .find(|(i, h)| !used_indices.contains(i) && output.desc.matches(h))
                 .map(|(i, _)| i)
                 .ok_or_else(|| {
                     let name = match &output.desc {
