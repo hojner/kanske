@@ -89,8 +89,12 @@ impl WaylandState {
                     head_info.name = name;
                 }
                 zwlr_output_head_v1::Event::Description { description } => {
-                    trace!(description = %description, "Head description set");
-                    head_info.description = description;
+                    let cleaned_desc = description
+                        .rsplit_once(" (")
+                        .map(|(base, _)| base.to_string())
+                        .unwrap_or(description);
+                    trace!(description = %cleaned_desc, "Head description set");
+                    head_info.description = cleaned_desc;
                 }
                 zwlr_output_head_v1::Event::Enabled { enabled } => {
                     let enabled = enabled != 0;

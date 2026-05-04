@@ -12,11 +12,6 @@ pub enum KanskeError {
     HeadNotFound {
         name: String,
     },
-    ModeNotFound {
-        head: String,
-        width: u32,
-        height: u32,
-    },
     CalloopError(String),
     NoConfigDir,
     DaemonNotRunning,
@@ -112,17 +107,6 @@ impl std::fmt::Display for KanskeError {
             }
             KanskeError::HeadNotFound { name } => {
                 write!(f, "Output head not found: {}", name)
-            }
-            KanskeError::ModeNotFound {
-                head,
-                width,
-                height,
-            } => {
-                write!(
-                    f,
-                    "Mode {}x{} not available on head {}",
-                    width, height, head
-                )
             }
             KanskeError::CalloopError(s) => write!(f, "Calloop error: {}", s),
             KanskeError::NoConfigDir => write!(

@@ -17,12 +17,14 @@ use crate::{
 };
 
 /// Finds a matching profile and applies its output configuration.
-/// Returns the list of exec directives from the matched profile (empty if no match).
+/// Returns the list of exec directives and the pending configuration object (if a profile
+/// matched). The caller must destroy the configuration object after the roundtrip that
+/// delivers `Succeeded`/`Failed`/`Cancelled`.
 pub fn find_and_apply_profile<D>(
     state: &mut WaylandState,
     qh: &QueueHandle<D>,
     config: &Config,
-) -> AppResult<Vec<ExecDirective>>
+) -> AppResult<(Vec<ExecDirective>, Option<ZwlrOutputConfigurationV1>)>
 where
     D: Dispatch<ZwlrOutputConfigurationV1, ()>
         + Dispatch<ZwlrOutputConfigurationHeadV1, ()>
@@ -78,9 +80,9 @@ where
             configure_head(output, &output_configuration, current_head, qh)?;
         }
         output_configuration.apply();
-        Ok(profile.execs.clone())
+        Ok((profile.execs.clone(), Some(output_configuration)))
     } else {
-        Ok(Vec::new())
+        Ok((Vec::new(), None))
     }
 }
 

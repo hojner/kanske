@@ -165,16 +165,23 @@ fn apply_if_changed(state: &mut KanskeState, queue: &mut EventQueue<KanskeState>
     info!("{}", reason);
     debug!(previous_serial = ?state.last_serial, new_serial = ?state.wayland.serial, heads = state.wayland.heads.len());
 
-    match find_and_apply_profile(&mut state.wayland, &state.queue_handle, &state.config) {
-        Ok(execs) => run_exec_commands(&execs),
+    let config_obj = match find_and_apply_profile(&mut state.wayland, &state.queue_handle, &state.config) {
+        Ok((execs, config_obj)) => {
+            run_exec_commands(&execs);
+            config_obj
+        }
         Err(e @ (KanskeError::ManagerNotAvailable | KanskeError::NoSerial)) => {
             return Err(e);
         }
         Err(e) => {
             warn!("Profile apply failed: {}", e);
+            None
         }
-    }
+    };
     queue.roundtrip(state)?;
+    if let Some(c) = config_obj {
+        c.destroy();
+    }
     state.last_serial = state.wayland.serial;
 
     Ok(())
