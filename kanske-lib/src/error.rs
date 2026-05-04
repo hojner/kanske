@@ -1,3 +1,5 @@
+use crate::parser::token::TokenPosition;
+
 #[derive(Debug)]
 pub enum KanskeError {
     ConfigError {
@@ -31,7 +33,7 @@ pub enum ConfigParseError {
     UnexpectedToken {
         expected: String,
         found: String,
-        position: usize,
+        position: TokenPosition,
     },
     UnterminatedString {
         line: usize,
@@ -55,7 +57,7 @@ pub enum ConfigParseError {
         value: String,
     },
     MissingProfileName {
-        position: usize,
+        position: TokenPosition,
     },
     IncludeError {
         path: String,
@@ -69,6 +71,7 @@ pub enum ConfigParseError {
         position: usize,
         line: usize,
     },
+    TokenNotAvailable,
 }
 
 impl From<wayland_client::DispatchError> for KanskeError {
@@ -152,7 +155,7 @@ impl std::fmt::Display for ConfigParseError {
             } => {
                 write!(
                     f,
-                    "Unexpected token at position {}: expected {}, found {}",
+                    "Unexpected token at {}: expected {}, found {}",
                     position, expected, found
                 )
             }
@@ -210,6 +213,7 @@ impl std::fmt::Display for ConfigParseError {
                     character, line, position
                 )
             }
+            ConfigParseError::TokenNotAvailable => write!(f, "Token not available"),
         }
     }
 }

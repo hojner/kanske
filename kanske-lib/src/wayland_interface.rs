@@ -61,6 +61,7 @@ impl WaylandState {
             }
             zwlr_output_manager_v1::Event::Finished => {
                 info!("Output manager finished");
+                self.manager = None;
             }
             _ => {}
         }
