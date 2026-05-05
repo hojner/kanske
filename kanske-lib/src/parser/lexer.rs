@@ -23,7 +23,7 @@ impl Lexer {
 
     fn wrap_token(&mut self, token: Token) -> ParseResult<TokenHolder> {
         Ok(TokenHolder {
-            token: token,
+            token,
             position: TokenPosition {
                 line: self.line,
                 column: self.col,
