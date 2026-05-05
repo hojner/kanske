@@ -1,3 +1,5 @@
+use crate::parser::token::TokenPosition;
+
 #[derive(Debug)]
 pub enum KanskeError {
     ConfigError {
@@ -26,7 +28,7 @@ pub enum ConfigParseError {
     UnexpectedToken {
         expected: String,
         found: String,
-        position: usize,
+        position: TokenPosition,
     },
     UnterminatedString {
         line: usize,
@@ -38,19 +40,23 @@ pub enum ConfigParseError {
     InvalidResolution {
         value: String,
         reason: String,
+        position: TokenPosition,
     },
     InvalidPosition {
         value: String,
         reason: String,
+        position: TokenPosition,
     },
     InvalidTransform {
         value: String,
+        position: TokenPosition,
     },
     InvalidAdaptiveSync {
         value: String,
+        position: TokenPosition,
     },
     MissingProfileName {
-        position: usize,
+        position: TokenPosition,
     },
     IncludeError {
         path: String,
@@ -64,6 +70,7 @@ pub enum ConfigParseError {
         position: usize,
         line: usize,
     },
+    TokenNotAvailable,
 }
 
 impl From<wayland_client::DispatchError> for KanskeError {
@@ -136,7 +143,7 @@ impl std::fmt::Display for ConfigParseError {
             } => {
                 write!(
                     f,
-                    "Unexpected token at position {}: expected {}, found {}",
+                    "Unexpected token at {}: expected {}, found {}",
                     position, expected, found
                 )
             }
@@ -150,24 +157,24 @@ impl std::fmt::Display for ConfigParseError {
             ConfigParseError::InvalidNumber { value, position } => {
                 write!(f, "Invalid number '{}' at position {}", value, position)
             }
-            ConfigParseError::InvalidResolution { value, reason } => {
-                write!(f, "Invalid resolution '{}': {}", value, reason)
+            ConfigParseError::InvalidResolution { value, reason, position } => {
+                write!(f, "Invalid resolution '{}' at {}: {}", value, position, reason)
             }
-            ConfigParseError::InvalidPosition { value, reason } => {
-                write!(f, "Invalid position '{}': {}", value, reason)
+            ConfigParseError::InvalidPosition { value, reason, position } => {
+                write!(f, "Invalid position '{}' at {}: {}", value, position, reason)
             }
-            ConfigParseError::InvalidTransform { value } => {
+            ConfigParseError::InvalidTransform { value, position } => {
                 write!(
                     f,
-                    "Invalid transform '{}': must be one of: normal, 90, 180, 270, flipped, flipped-90, flipped-180, flipped-270",
-                    value
+                    "Invalid transform '{}' at {}: must be one of: normal, 90, 180, 270, flipped, flipped-90, flipped-180, flipped-270",
+                    value, position
                 )
             }
-            ConfigParseError::InvalidAdaptiveSync { value } => {
+            ConfigParseError::InvalidAdaptiveSync { value, position } => {
                 write!(
                     f,
-                    "Invalid adaptive_sync value '{}': must be 'on' or 'off'",
-                    value
+                    "Invalid adaptive_sync value '{}' at {}: must be 'on' or 'off'",
+                    value, position
                 )
             }
             ConfigParseError::MissingProfileName { position } => {
@@ -194,6 +201,7 @@ impl std::fmt::Display for ConfigParseError {
                     character, line, position
                 )
             }
+            ConfigParseError::TokenNotAvailable => write!(f, "Token not available"),
         }
     }
 }

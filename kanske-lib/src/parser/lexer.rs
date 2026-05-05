@@ -1,13 +1,13 @@
 // Lexical analyzer (tokenizer) for Kanske configuration files
-
 use crate::error::{ConfigParseError, ParseResult};
-use crate::parser::token::Token;
+use crate::parser::token::{Token, TokenHolder, TokenPosition};
 
 pub struct Lexer {
     pub input: String,
     pub position: usize,
     pub line: usize,
-    pending_token: Option<Token>,
+    pub col: usize,
+    pending_token: Option<TokenHolder>,
 }
 
 impl Lexer {
@@ -16,11 +16,22 @@ impl Lexer {
             input,
             position: 0,
             line: 0,
+            col: 0,
             pending_token: None,
         }
     }
 
-    pub fn tokenizer(&mut self) -> ParseResult<Vec<Token>> {
+    fn wrap_token(&mut self, token: Token) -> ParseResult<TokenHolder> {
+        Ok(TokenHolder {
+            token: token,
+            position: TokenPosition {
+                line: self.line,
+                column: self.col,
+            },
+        })
+    }
+
+    pub fn tokenizer(&mut self) -> ParseResult<Vec<TokenHolder>> {
         let mut tokens = Vec::new();
 
         loop {
@@ -29,11 +40,11 @@ impl Lexer {
             }
             self.skip_whitespace_and_comments();
             if self.is_at_end() {
-                tokens.push(Token::Eof);
+                tokens.push(self.wrap_token(Token::Eof)?);
                 break;
             }
             let token = self.new_token()?;
-            tokens.push(token);
+            tokens.push(self.wrap_token(token)?);
         }
         Ok(tokens)
     }
@@ -61,7 +72,7 @@ impl Lexer {
             }
             _ => Err(ConfigParseError::UnexpectedCharacter {
                 character: ch,
-                position: self.position,
+                position: self.col,
                 line: self.line,
             }),
         }
@@ -124,6 +135,7 @@ impl Lexer {
         while !self.is_at_end() && self.peek() != '"' {
             if self.peek() == '\n' {
                 self.line += 1;
+                self.col = 0;
             }
             self.advance();
         }
@@ -181,6 +193,7 @@ impl Lexer {
                 ' ' | '\r' | '\t' => self.advance(),
                 '\n' => {
                     self.line += 1;
+                    self.col = 0;
                     self.advance();
                 }
                 '#' => {
@@ -205,13 +218,14 @@ impl Lexer {
             self.advance();
         }
         let value = self.input[start..self.position].trim_end().to_string();
-        self.pending_token = Some(Token::String(value));
+        self.pending_token = Some(self.wrap_token(Token::String(value))?);
         Ok(keyword)
     }
 
     fn advance(&mut self) {
         if let Some(ch) = self.input[self.position..].chars().next() {
             self.position += ch.len_utf8();
+            self.col += ch.len_utf8();
         }
     }
 
