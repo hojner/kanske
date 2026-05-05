@@ -5,7 +5,7 @@ use crate::parser::ast::{
     Config, ConfigItem, ExecDirective, IncludeDirective, OutputCommand, OutputConfig, OutputDesc,
     Profile, Transform,
 };
-use crate::parser::token::{Token, TokenHolder};
+use crate::parser::token::{Token, TokenHolder, TokenPosition};
 
 #[derive(Debug, Clone)]
 pub struct Parser {
@@ -172,7 +172,9 @@ impl Parser {
 
         let (width, height, frequency) =
             if let Token::Identifier(mode_str) = &self.tokens[self.current].token {
-                self.parse_mode_str(mode_str)?
+                let mode_str = mode_str.clone();
+                let pos = self.tokens[self.current].position.clone();
+                self.parse_mode_str(&mode_str, pos)?
             } else {
                 return Err(ConfigParseError::UnexpectedToken {
                     expected: "mode string (e.g., 1920x1080@60Hz)".to_string(),
@@ -188,7 +190,7 @@ impl Parser {
         })
     }
 
-    fn parse_mode_str(&self, s: &str) -> ParseResult<(u32, u32, Option<f32>)> {
+    fn parse_mode_str(&self, s: &str, position: TokenPosition) -> ParseResult<(u32, u32, Option<f32>)> {
         let parts: Vec<_> = s.split("@").collect();
         let resolution = parts[0];
         let res_parts: Vec<_> = resolution.split("x").collect();
@@ -197,6 +199,7 @@ impl Parser {
             return Err(ConfigParseError::InvalidResolution {
                 value: s.to_string(),
                 reason: "expected format: WIDTHxHEIGHT (e.g., 1920x1080)".to_string(),
+                position: position.clone(),
             });
         }
 
@@ -208,6 +211,7 @@ impl Parser {
                     .map_err(|_| ConfigParseError::InvalidResolution {
                         value: s.to_string(),
                         reason: format!("invalid frequency: {}", parts[1]),
+                        position: position.clone(),
                     })?,
             )
         } else {
@@ -218,12 +222,14 @@ impl Parser {
             ConfigParseError::InvalidResolution {
                 value: s.to_string(),
                 reason: format!("invalid width: {}", res_parts[0]),
+                position: position.clone(),
             }
         })?;
         let height = res_parts[1].trim().parse::<u32>().map_err(|_| {
             ConfigParseError::InvalidResolution {
                 value: s.to_string(),
                 reason: format!("invalid height: {}", res_parts[1]),
+                position,
             }
         })?;
 
@@ -235,7 +241,9 @@ impl Parser {
         self.advance();
 
         let (x, y) = if let Token::Identifier(position_str) = &self.tokens[self.current].token {
-            self.parse_position_str(position_str)?
+            let position_str = position_str.clone();
+            let pos = self.tokens[self.current].position.clone();
+            self.parse_position_str(&position_str, pos)?
         } else {
             return Err(ConfigParseError::UnexpectedToken {
                 expected: "position string (e.g., 1920,0)".to_string(),
@@ -247,13 +255,14 @@ impl Parser {
         Ok(OutputCommand::Position { x, y })
     }
 
-    fn parse_position_str(&self, s: &str) -> ParseResult<(i32, i32)> {
+    fn parse_position_str(&self, s: &str, position: TokenPosition) -> ParseResult<(i32, i32)> {
         let parts: Vec<_> = s.split(",").collect();
 
         if parts.len() != 2 {
             return Err(ConfigParseError::InvalidPosition {
                 value: s.to_string(),
                 reason: "expected format: X,Y (e.g., 1920,0)".to_string(),
+                position: position.clone(),
             });
         }
 
@@ -263,6 +272,7 @@ impl Parser {
             .map_err(|_| ConfigParseError::InvalidPosition {
                 value: s.to_string(),
                 reason: format!("invalid X coordinate: {}", parts[0]),
+                position: position.clone(),
             })?;
 
         let y = parts[1]
@@ -271,6 +281,7 @@ impl Parser {
             .map_err(|_| ConfigParseError::InvalidPosition {
                 value: s.to_string(),
                 reason: format!("invalid Y coordinate: {}", parts[1]),
+                position,
             })?;
 
         Ok((x, y))
@@ -297,6 +308,7 @@ impl Parser {
         self.validate(&Token::Transform)?;
         self.advance();
 
+        let pos = self.tokens[self.current].position.clone();
         let transform = match &self.tokens[self.current].token {
             Token::Number(n) => match *n as i32 {
                 90 => Transform::Rotate90,
@@ -305,6 +317,7 @@ impl Parser {
                 _ => {
                     return Err(ConfigParseError::InvalidTransform {
                         value: n.to_string(),
+                        position: pos,
                     });
                 }
             },
@@ -315,7 +328,7 @@ impl Parser {
                 "flipped-180" => Transform::Flipped180,
                 "flipped-270" => Transform::Flipped270,
                 _ => {
-                    return Err(ConfigParseError::InvalidTransform { value: s.clone() });
+                    return Err(ConfigParseError::InvalidTransform { value: s.clone(), position: pos });
                 }
             },
             other => {
@@ -323,7 +336,7 @@ impl Parser {
                     expected: "transform value (normal, 90, 180, 270, flipped, flipped-90, etc.)"
                         .to_string(),
                     found: format!("{:?}", other),
-                    position: self.tokens[self.current].position.clone(),
+                    position: pos,
                 });
             }
         };
@@ -335,19 +348,20 @@ impl Parser {
         self.validate(&Token::AdaptiveSync)?;
         self.advance();
 
+        let pos = self.tokens[self.current].position.clone();
         let adaptive_sync = if let Token::Identifier(a) = &self.tokens[self.current].token {
             match a.as_str() {
                 "on" => OutputCommand::AdaptiveSync(true),
                 "off" => OutputCommand::AdaptiveSync(false),
                 _ => {
-                    return Err(ConfigParseError::InvalidAdaptiveSync { value: a.clone() });
+                    return Err(ConfigParseError::InvalidAdaptiveSync { value: a.clone(), position: pos });
                 }
             }
         } else {
             return Err(ConfigParseError::UnexpectedToken {
                 expected: "on or off".to_string(),
                 found: format!("{:?}", &self.tokens[self.current]),
-                position: self.tokens[self.current].position.clone(),
+                position: pos,
             });
         };
 
