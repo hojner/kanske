@@ -73,8 +73,3 @@ Output commands: `Enable`, `Disable`, `Mode { width, height, frequency }`,
 All crates inherit `version`, `edition`, `authors`, `license` from
 `[workspace.package]`. Wayland crates are declared in `[workspace.dependencies]`
 and referenced with `.workspace = true`.
-
-### `edition = "2024"`
-
-The workspace uses `edition = "2024"` — be aware this is non-standard (Rust
-editions are 2015/2018/2021). Treat it as 2021 for practical purposes.
