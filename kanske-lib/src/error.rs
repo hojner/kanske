@@ -165,11 +165,27 @@ impl std::fmt::Display for ConfigParseError {
             ConfigParseError::InvalidNumber { value, position } => {
                 write!(f, "Invalid number '{}' at position {}", value, position)
             }
-            ConfigParseError::InvalidResolution { value, reason, position } => {
-                write!(f, "Invalid resolution '{}' at {}: {}", value, position, reason)
+            ConfigParseError::InvalidResolution {
+                value,
+                reason,
+                position,
+            } => {
+                write!(
+                    f,
+                    "Invalid resolution '{}' at {}: {}",
+                    value, position, reason
+                )
             }
-            ConfigParseError::InvalidPosition { value, reason, position } => {
-                write!(f, "Invalid position '{}' at {}: {}", value, position, reason)
+            ConfigParseError::InvalidPosition {
+                value,
+                reason,
+                position,
+            } => {
+                write!(
+                    f,
+                    "Invalid position '{}' at {}: {}",
+                    value, position, reason
+                )
             }
             ConfigParseError::InvalidTransform { value, position } => {
                 write!(

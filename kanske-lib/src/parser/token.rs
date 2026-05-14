@@ -57,9 +57,7 @@ impl TokenStream {
                 token: Token::Eof,
                 position: tokens
                     .last()
-                    .map_or(TokenPosition { line: 0, column: 0 }, |t| {
-                        t.position.clone()
-                    }),
+                    .map_or(TokenPosition { line: 0, column: 0 }, |t| t.position.clone()),
             }),
         }
         Self { tokens, current: 0 }
