@@ -18,10 +18,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// List anything you want!
+    /// List current outputs
     List,
-    /// Reload when needed.
+    /// Reload kanske config
     Reload,
+    /// Status show current applied profile
+    Status,
+    /// Manually switch profile
+    Switch,
 }
 
 fn main() {
@@ -34,6 +38,8 @@ fn main() {
             Ok(_) => println!("Kanske config reloaded"),
             Err(e) => println!("Kanske reload failed: {}", e),
         },
+        Commands::Status => todo!(),
+        Commands::Switch => todo!(),
     }
 }
 

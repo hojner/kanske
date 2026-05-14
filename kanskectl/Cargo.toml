@@ -4,6 +4,13 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+description = "CLI control tool for the kanske Wayland display configuration daemon"
+publish = false
+keywords = ["wayland", "display", "monitor", "hotplug", "compositor"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 kanske-lib = { path = "../kanske-lib" }

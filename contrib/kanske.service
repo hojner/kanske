@@ -1,0 +1,14 @@
+[Unit]
+Description=Kanske dynamic display configuration
+Documentation=https://github.com/hojner/kanske
+BindsTo=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.cargo/bin/kanske
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

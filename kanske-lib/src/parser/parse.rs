@@ -5,25 +5,26 @@ use crate::parser::ast::{
     Config, ConfigItem, ExecDirective, IncludeDirective, OutputCommand, OutputConfig, OutputDesc,
     Profile, Transform,
 };
-use crate::parser::token::{Token, TokenHolder, TokenPosition};
+use crate::parser::token::{Token, TokenHolder, TokenPosition, TokenStream};
 
 #[derive(Debug, Clone)]
 pub struct Parser {
-    pub tokens: Vec<TokenHolder>,
-    pub current: usize,
+    tokens: TokenStream,
 }
 
 impl Parser {
     pub fn new(tokens: Vec<TokenHolder>) -> Self {
-        Self { tokens, current: 0 }
+        Self {
+            tokens: TokenStream::new(tokens),
+        }
     }
 
     pub fn parse(&mut self) -> ParseResult<Config> {
         let mut config = Config { items: Vec::new() };
         let mut config_item;
 
-        while !self.is_at_end() {
-            config_item = match &self.tokens[self.current].token {
+        while !self.tokens.is_at_end() {
+            config_item = match &self.tokens.current().token {
                 Token::Profile => self.parse_profile()?,
                 Token::Include => ConfigItem::Include(self.parse_include()?),
                 Token::Output => ConfigItem::Output(self.parse_output()?),
@@ -32,7 +33,7 @@ impl Parser {
                     return Err(ConfigParseError::UnexpectedToken {
                         expected: "profile or output".to_string(),
                         found: format!("{:?}", other),
-                        position: self.tokens[self.current].position.clone(),
+                        position: self.tokens.current().position.clone(),
                     });
                 }
             };
@@ -43,28 +44,28 @@ impl Parser {
 
     fn parse_profile(&mut self) -> ParseResult<ConfigItem> {
         self.validate(&Token::Profile)?;
-        self.advance();
+        self.tokens.advance();
 
         // TODO:
         // For now, a profile must have a name,
         // will handle name generation for anonymous profiles later
         //
 
-        let name = match &self.tokens[self.current].token {
+        let name = match &self.tokens.current().token {
             Token::String(s) | Token::Identifier(s) => s.clone(),
             _ => {
                 return Err(ConfigParseError::MissingProfileName {
-                    position: self.tokens[self.current].position.clone(),
+                    position: self.tokens.current().position.clone(),
                 });
             }
         };
         let mut profile = Profile::new(name);
-        self.advance();
+        self.tokens.advance();
         self.validate(&Token::LeftBrace)?;
-        self.advance();
+        self.tokens.advance();
 
-        while !self.is_at_end() {
-            match &self.tokens[self.current].token {
+        while !self.tokens.is_at_end() {
+            match &self.tokens.current().token {
                 Token::Output => {
                     profile.outputs.push(self.parse_output()?);
                 }
@@ -72,14 +73,14 @@ impl Parser {
                     profile.execs.push(self.parse_exec()?);
                 }
                 Token::RightBrace => {
-                    self.advance();
+                    self.tokens.advance();
                     break;
                 }
                 other => {
                     return Err(ConfigParseError::UnexpectedToken {
                         expected: "output, exec, or }".to_string(),
                         found: format!("{:?}", other),
-                        position: self.tokens[self.current].position.clone(),
+                        position: self.tokens.current().position.clone(),
                     });
                 }
             };
@@ -89,9 +90,9 @@ impl Parser {
 
     fn parse_output(&mut self) -> ParseResult<OutputConfig> {
         self.validate(&Token::Output)?;
-        self.advance();
+        self.tokens.advance();
 
-        let desc = match &self.tokens[self.current].token {
+        let desc = match &self.tokens.current().token {
             Token::Identifier(s) => match s.as_str() {
                 "*" => OutputDesc::Any,
                 _ => OutputDesc::Name(s.clone()),
@@ -101,25 +102,25 @@ impl Parser {
                 return Err(ConfigParseError::UnexpectedToken {
                     expected: "output name".to_string(),
                     found: format!("{:?}", other),
-                    position: self.tokens[self.current].position.clone(),
+                    position: self.tokens.current().position.clone(),
                 });
             }
         };
 
-        self.advance();
+        self.tokens.advance();
 
         let mut commands = Vec::new();
         loop {
-            match &self.tokens[self.current].token {
+            match &self.tokens.current().token {
                 Token::LeftBrace => {
-                    self.advance();
+                    self.tokens.advance();
 
-                    while !self.is_at_end() && !self.check(&Token::RightBrace) {
+                    while !self.tokens.is_at_end() && !self.check(&Token::RightBrace) {
                         commands.push(self.parse_output_command()?);
-                        self.advance();
+                        self.tokens.advance();
                     }
                     self.validate(&Token::RightBrace)?;
-                    self.advance();
+                    self.tokens.advance();
                     break;
                 }
                 Token::RightBrace
@@ -137,13 +138,13 @@ impl Parser {
                 | Token::Transform
                 | Token::AdaptiveSync => {
                     commands.push(self.parse_output_command()?);
-                    self.advance();
+                    self.tokens.advance();
                 }
                 _ => {
                     return Err(ConfigParseError::UnexpectedToken {
                         expected: "output command (enable, disable, mode, position, scale, transform, adaptive_sync)".to_string(),
-                        found: format!("{:?}", &self.tokens[self.current]),
-                        position: self.tokens[self.current].position.clone(),
+                        found: format!("{:?}", self.tokens.current()),
+                        position: self.tokens.current().position.clone(),
                     });
                 }
             };
@@ -153,7 +154,7 @@ impl Parser {
     }
 
     fn parse_output_command(&mut self) -> ParseResult<OutputCommand> {
-        match &self.tokens[self.current].token {
+        match &self.tokens.current().token {
             Token::Enabled(b) => Ok(OutputCommand::Enabled(*b)),
             Token::Mode => self.parse_mode(),
             Token::Position => self.parse_position(),
@@ -163,25 +164,25 @@ impl Parser {
             other => Err(ConfigParseError::UnexpectedToken {
                 expected: "output command".to_string(),
                 found: format!("{:?}", other),
-                position: self.tokens[self.current].position.clone(),
+                position: self.tokens.current().position.clone(),
             }),
         }
     }
 
     fn parse_mode(&mut self) -> ParseResult<OutputCommand> {
         self.validate(&Token::Mode)?;
-        self.advance();
+        self.tokens.advance();
 
         let (width, height, frequency) =
-            if let Token::Identifier(mode_str) = &self.tokens[self.current].token {
+            if let Token::Identifier(mode_str) = &self.tokens.current().token {
                 let mode_str = mode_str.clone();
-                let pos = self.tokens[self.current].position.clone();
+                let pos = self.tokens.current().position.clone();
                 self.parse_mode_str(&mode_str, pos)?
             } else {
                 return Err(ConfigParseError::UnexpectedToken {
                     expected: "mode string (e.g., 1920x1080@60Hz)".to_string(),
-                    found: format!("{:?}", &self.tokens[self.current].token),
-                    position: self.tokens[self.current].position.clone(),
+                    found: format!("{:?}", &self.tokens.current().token),
+                    position: self.tokens.current().position.clone(),
                 });
             };
 
@@ -244,17 +245,17 @@ impl Parser {
 
     fn parse_position(&mut self) -> ParseResult<OutputCommand> {
         self.validate(&Token::Position)?;
-        self.advance();
+        self.tokens.advance();
 
-        let (x, y) = if let Token::Identifier(position_str) = &self.tokens[self.current].token {
+        let (x, y) = if let Token::Identifier(position_str) = &self.tokens.current().token {
             let position_str = position_str.clone();
-            let pos = self.tokens[self.current].position.clone();
+            let pos = self.tokens.current().position.clone();
             self.parse_position_str(&position_str, pos)?
         } else {
             return Err(ConfigParseError::UnexpectedToken {
                 expected: "position string (e.g., 1920,0)".to_string(),
-                found: format!("{:?}", &self.tokens[self.current]),
-                position: self.tokens[self.current].position.clone(),
+                found: format!("{:?}", self.tokens.current()),
+                position: self.tokens.current().position.clone(),
             });
         };
 
@@ -295,15 +296,15 @@ impl Parser {
 
     fn parse_scale(&mut self) -> ParseResult<OutputCommand> {
         self.validate(&Token::Scale)?;
-        self.advance();
+        self.tokens.advance();
 
-        let s = if let Token::Number(scale_str) = &self.tokens[self.current].token {
+        let s = if let Token::Number(scale_str) = &self.tokens.current().token {
             *scale_str
         } else {
             return Err(ConfigParseError::UnexpectedToken {
                 expected: "scale number (e.g., 1.5)".to_string(),
-                found: format!("{:?}", &self.tokens[self.current]),
-                position: self.tokens[self.current].position.clone(),
+                found: format!("{:?}", self.tokens.current()),
+                position: self.tokens.current().position.clone(),
             });
         };
 
@@ -312,10 +313,10 @@ impl Parser {
 
     fn parse_transform(&mut self) -> ParseResult<OutputCommand> {
         self.validate(&Token::Transform)?;
-        self.advance();
+        self.tokens.advance();
 
-        let pos = self.tokens[self.current].position.clone();
-        let transform = match &self.tokens[self.current].token {
+        let pos = self.tokens.current().position.clone();
+        let transform = match &self.tokens.current().token {
             Token::Number(n) => match *n as i32 {
                 90 => Transform::Rotate90,
                 180 => Transform::Rotate180,
@@ -355,10 +356,10 @@ impl Parser {
 
     fn parse_adaptive_sync(&mut self) -> ParseResult<OutputCommand> {
         self.validate(&Token::AdaptiveSync)?;
-        self.advance();
+        self.tokens.advance();
 
-        let pos = self.tokens[self.current].position.clone();
-        let adaptive_sync = if let Token::Identifier(a) = &self.tokens[self.current].token {
+        let pos = self.tokens.current().position.clone();
+        let adaptive_sync = if let Token::Identifier(a) = &self.tokens.current().token {
             match a.as_str() {
                 "on" => OutputCommand::AdaptiveSync(true),
                 "off" => OutputCommand::AdaptiveSync(false),
@@ -372,7 +373,7 @@ impl Parser {
         } else {
             return Err(ConfigParseError::UnexpectedToken {
                 expected: "on or off".to_string(),
-                found: format!("{:?}", &self.tokens[self.current]),
+                found: format!("{:?}", self.tokens.current()),
                 position: pos,
             });
         };
@@ -381,15 +382,15 @@ impl Parser {
     }
 
     fn check(&self, token: &Token) -> bool {
-        discriminant(&self.tokens[self.current].token) == discriminant(token)
+        discriminant(&self.tokens.current().token) == discriminant(token)
     }
 
     fn validate(&self, token: &Token) -> ParseResult<()> {
         if !self.check(token) {
             return Err(ConfigParseError::UnexpectedToken {
                 expected: format!("{:?}", token),
-                found: format!("{:?}", self.tokens[self.current]),
-                position: self.tokens[self.current].position.clone(),
+                found: format!("{:?}", self.tokens.current()),
+                position: self.tokens.current().position.clone(),
             });
         }
         Ok(())
@@ -397,50 +398,40 @@ impl Parser {
 
     fn parse_exec(&mut self) -> ParseResult<ExecDirective> {
         self.validate(&Token::Exec)?;
-        self.advance();
+        self.tokens.advance();
 
-        let command = match &self.tokens[self.current].token {
+        let command = match &self.tokens.current().token {
             Token::String(s) => s.clone(),
             other => {
                 return Err(ConfigParseError::UnexpectedToken {
                     expected: "exec command string".to_string(),
                     found: format!("{:?}", other),
-                    position: self.tokens[self.current].position.clone(),
+                    position: self.tokens.current().position.clone(),
                 });
             }
         };
-        self.advance();
+        self.tokens.advance();
 
         Ok(ExecDirective { command })
     }
 
     fn parse_include(&mut self) -> ParseResult<IncludeDirective> {
         self.validate(&Token::Include)?;
-        self.advance();
+        self.tokens.advance();
 
-        let path = match &self.tokens[self.current].token {
+        let path = match &self.tokens.current().token {
             Token::String(s) => s.clone(),
             other => {
                 return Err(ConfigParseError::UnexpectedToken {
                     expected: "include path".to_string(),
                     found: format!("{:?}", other),
-                    position: self.tokens[self.current].position.clone(),
+                    position: self.tokens.current().position.clone(),
                 });
             }
         };
-        self.advance();
+        self.tokens.advance();
 
         Ok(IncludeDirective { path })
     }
 
-    fn is_at_end(&self) -> bool {
-        if self.current >= self.tokens.len() {
-            return true;
-        }
-        false
-    }
-
-    fn advance(&mut self) {
-        self.current += 1;
-    }
 }

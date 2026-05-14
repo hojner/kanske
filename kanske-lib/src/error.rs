@@ -19,6 +19,10 @@ pub enum KanskeError {
     DaemonNotRunning,
     InvalidPidFile,
     SignalFailed(String),
+    ProfileNotFound {
+        name: String,
+    },
+    IpcError(String),
 }
 
 #[derive(Debug)]
@@ -125,6 +129,10 @@ impl std::fmt::Display for KanskeError {
             }
             KanskeError::InvalidPidFile => write!(f, "The Kanske Pid file is invalid"),
             KanskeError::SignalFailed(s) => write!(f, "kanskectl failed to send signal: {}", s),
+            KanskeError::ProfileNotFound { name } => {
+                write!(f, "Profile '{}' not found in config", name)
+            }
+            KanskeError::IpcError(s) => write!(f, "IPC error: {}", s),
         }
     }
 }

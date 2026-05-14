@@ -11,6 +11,9 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Patrik Höjner <patrik@hojner.se>"]
 license = "MIT"
+repository = "https://github.com/hojner/kanske"
+homepage = "https://github.com/hojner/kanske"
+readme = "README.md"
 
 [workspace.dependencies]
 wayland-client = "0.31.11"

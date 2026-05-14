@@ -4,6 +4,12 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+description = "Core library for kanske — Wayland output management, config parsing, profile matching"
+keywords = ["wayland", "display", "monitor", "wlr-output-management"]
+categories = ["parser-implementations"]
 
 [dependencies]
 wayland-client.workspace = true

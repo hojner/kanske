@@ -4,6 +4,12 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+description = "Wayland display configuration daemon — automatically applies output profiles on hotplug"
+keywords = ["wayland", "display", "monitor", "hotplug", "compositor"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 kanske-lib = { path = "../kanske-lib" }
