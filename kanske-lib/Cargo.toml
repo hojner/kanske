@@ -8,7 +8,7 @@ repository.workspace = true
 homepage.workspace = true
 readme.workspace = true
 description = "Core library for kanske — Wayland output management, config parsing, profile matching"
-keywords = ["wayland", "display", "monitor", "wlr-output-management"]
+keywords = ["wayland", "display", "monitor", "wlr-output-mgmt"]
 categories = ["parser-implementations"]
 
 [dependencies]
