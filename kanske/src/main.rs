@@ -69,6 +69,27 @@ fn run() -> AppResult<()> {
     event_queue.roundtrip(&mut state)?;
     event_queue.roundtrip(&mut state)?;
 
+    // Apply a matching profile immediately on startup (like kanshi does),
+    // rather than waiting for the first hotplug event.
+    match find_and_apply_profile(&mut state.wayland, &state.queue_handle, &state.config) {
+        Ok((execs, config_obj)) => {
+            info!("Initial profile applied");
+            run_exec_commands(&execs);
+            event_queue.roundtrip(&mut state)?;
+            if let Some(c) = config_obj {
+                c.destroy();
+            }
+            state.last_serial = state.wayland.serial;
+        }
+        Err(KanskeError::NoSerial | KanskeError::ManagerNotAvailable) => {
+            debug!("No outputs available yet, waiting for hotplug");
+        }
+        Err(e) => {
+            warn!("Initial profile apply failed: {}", e);
+            state.last_serial = state.wayland.serial;
+        }
+    }
+
     let mut event_loop: EventLoop<KanskeState> =
         EventLoop::try_new().map_err(|e| KanskeError::CalloopError(e.to_string()))?;
     let signal = event_loop.get_signal();
