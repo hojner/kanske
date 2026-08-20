@@ -6,12 +6,18 @@ use crate::{
 };
 
 pub fn find_matching_profile<'a>(heads: &[HeadInfo], config: &'a Config) -> Option<&'a Profile> {
-    let head_names: Vec<&str> = heads.iter().map(|h| h.name.as_str()).collect();
+    // Filter out virtual placeholder heads (disabled with no available modes)
+    // that compositors may report for bookkeeping purposes.
+    let real_heads: Vec<&HeadInfo> = heads
+        .iter()
+        .filter(|h| h.enabled || !h.modes.is_empty())
+        .collect();
+    let head_names: Vec<&str> = real_heads.iter().map(|h| h.name.as_str()).collect();
     debug!(heads = ?head_names, "Finding matching profile");
 
     let result = config.items.iter().find_map(|i| {
         if let ConfigItem::Profile(p) = i {
-            if profile_matches(heads, p) {
+            if profile_matches(&real_heads, p) {
                 Some(p)
             } else {
                 None
@@ -28,7 +34,7 @@ pub fn find_matching_profile<'a>(heads: &[HeadInfo], config: &'a Config) -> Opti
     result
 }
 
-fn profile_matches(heads: &[HeadInfo], profile: &Profile) -> bool {
+fn profile_matches(heads: &[&HeadInfo], profile: &Profile) -> bool {
     let profile_name = profile.name.as_deref().unwrap_or("<anonymous>");
 
     if heads.len() != profile.outputs.len() {
