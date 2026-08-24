@@ -6,11 +6,11 @@ use crate::{
 };
 
 pub fn find_matching_profile<'a>(heads: &[HeadInfo], config: &'a Config) -> Option<&'a Profile> {
-    // Filter out virtual placeholder heads (disabled with no available modes)
-    // that compositors may report for bookkeeping purposes.
+    // Filter out the FALLBACK placeholder head that compositors (e.g. Hyprland)
+    // temporarily report during hotplug transitions.
     let real_heads: Vec<&HeadInfo> = heads
         .iter()
-        .filter(|h| h.enabled || !h.modes.is_empty())
+        .filter(|h| h.name != "FALLBACK")
         .collect();
     let head_names: Vec<&str> = real_heads.iter().map(|h| h.name.as_str()).collect();
     debug!(heads = ?head_names, "Finding matching profile");
