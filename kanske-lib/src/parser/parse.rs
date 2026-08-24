@@ -181,7 +181,7 @@ impl Parser {
             } else {
                 return Err(ConfigParseError::UnexpectedToken {
                     expected: "mode string (e.g., 1920x1080@60Hz)".to_string(),
-                    found: format!("{:?}", &self.tokens.current().token),
+                    found: format!("{:?}", self.tokens.current().token),
                     position: self.tokens.current().position.clone(),
                 });
             };
