@@ -12,7 +12,7 @@ use crate::{
     AppResult,
     error::KanskeError,
     matcher::find_matching_profile,
-    parser::ast::{Config, ExecDirective, OutputCommand, OutputConfig, OutputDesc},
+    parser::ast::{Config, ConfigItem, ExecDirective, OutputCommand, OutputConfig, OutputDesc, Profile},
     wayland_interface::{HeadInfo, WaylandState},
 };
 
@@ -30,60 +30,103 @@ where
         + Dispatch<ZwlrOutputConfigurationHeadV1, ()>
         + 'static,
 {
-    if let Some(profile) = find_matching_profile(&state.heads, config) {
-        info!(profile = ?profile.name, "Applying profile");
-        let mut used_indices: HashSet<usize> = HashSet::new();
-        let manager = state
-            .manager
-            .as_ref()
-            .ok_or(KanskeError::ManagerNotAvailable)?;
-        let serial = state.serial.ok_or(KanskeError::NoSerial)?;
-        let output_configuration = manager.create_configuration(serial, qh, ());
-
-        for output in profile
-            .outputs
-            .iter()
-            .filter(|f| matches!(f.desc, OutputDesc::Name(_) | OutputDesc::Description(_)))
-        {
-            let position = state
-                .heads
-                .iter()
-                .enumerate()
-                .find(|(i, h)| !used_indices.contains(i) && output.desc.matches(h))
-                .map(|(i, _)| i)
-                .ok_or_else(|| {
-                    let name = match &output.desc {
-                        OutputDesc::Name(n) => n.clone(),
-                        OutputDesc::Description(d) => d.clone(),
-                        OutputDesc::Any => "*".to_string(),
-                    };
-                    KanskeError::HeadNotFound { name }
-                })?;
-            used_indices.insert(position);
-            let current_head = &state.heads[position];
-            debug!(output = ?output.desc, head = %current_head.name, "Named output matched to head");
-            configure_head(output, &output_configuration, current_head, qh)?;
-        }
-        for output in profile
-            .outputs
-            .iter()
-            .filter(|f| matches!(f.desc, OutputDesc::Any))
-        {
-            let position = (0..state.heads.len())
-                .find(|i| !used_indices.contains(i))
-                .ok_or_else(|| KanskeError::HeadNotFound {
-                    name: "*".to_string(),
-                })?;
-            used_indices.insert(position);
-            let current_head = &state.heads[position];
-            debug!(head = %current_head.name, "Wildcard output consuming head");
-            configure_head(output, &output_configuration, current_head, qh)?;
-        }
-        output_configuration.apply();
-        Ok((profile.execs.clone(), Some(output_configuration)))
-    } else {
-        Ok((Vec::new(), None))
+    match find_matching_profile(&state.heads, config) {
+        Some(profile) => apply_profile(state, qh, profile),
+        None => Ok((Vec::new(), None)),
     }
+}
+
+/// Looks up a profile by name in `config` and applies it regardless of whether it matches
+/// the currently connected heads. Used for manual `kanskectl switch <profile>` requests.
+/// Returns `KanskeError::ProfileNotFound` if no profile with that name exists.
+pub fn apply_named_profile<D>(
+    state: &mut WaylandState,
+    qh: &QueueHandle<D>,
+    config: &Config,
+    name: &str,
+) -> AppResult<(Vec<ExecDirective>, Option<ZwlrOutputConfigurationV1>)>
+where
+    D: Dispatch<ZwlrOutputConfigurationV1, ()>
+        + Dispatch<ZwlrOutputConfigurationHeadV1, ()>
+        + 'static,
+{
+    let profile = config
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ConfigItem::Profile(p) if p.name.as_deref() == Some(name) => Some(p),
+            _ => None,
+        })
+        .ok_or_else(|| KanskeError::ProfileNotFound {
+            name: name.to_string(),
+        })?;
+    apply_profile(state, qh, profile)
+}
+
+/// Applies the given profile's output configuration to the currently connected heads.
+/// Returns the list of exec directives and the pending configuration object. The caller
+/// must destroy the configuration object after the roundtrip that delivers
+/// `Succeeded`/`Failed`/`Cancelled`.
+fn apply_profile<D>(
+    state: &mut WaylandState,
+    qh: &QueueHandle<D>,
+    profile: &Profile,
+) -> AppResult<(Vec<ExecDirective>, Option<ZwlrOutputConfigurationV1>)>
+where
+    D: Dispatch<ZwlrOutputConfigurationV1, ()>
+        + Dispatch<ZwlrOutputConfigurationHeadV1, ()>
+        + 'static,
+{
+    info!(profile = ?profile.name, "Applying profile");
+    let mut used_indices: HashSet<usize> = HashSet::new();
+    let manager = state
+        .manager
+        .as_ref()
+        .ok_or(KanskeError::ManagerNotAvailable)?;
+    let serial = state.serial.ok_or(KanskeError::NoSerial)?;
+    let output_configuration = manager.create_configuration(serial, qh, ());
+
+    for output in profile
+        .outputs
+        .iter()
+        .filter(|f| matches!(f.desc, OutputDesc::Name(_) | OutputDesc::Description(_)))
+    {
+        let position = state
+            .heads
+            .iter()
+            .enumerate()
+            .find(|(i, h)| !used_indices.contains(i) && output.desc.matches(h))
+            .map(|(i, _)| i)
+            .ok_or_else(|| {
+                let name = match &output.desc {
+                    OutputDesc::Name(n) => n.clone(),
+                    OutputDesc::Description(d) => d.clone(),
+                    OutputDesc::Any => "*".to_string(),
+                };
+                KanskeError::HeadNotFound { name }
+            })?;
+        used_indices.insert(position);
+        let current_head = &state.heads[position];
+        debug!(output = ?output.desc, head = %current_head.name, "Named output matched to head");
+        configure_head(output, &output_configuration, current_head, qh)?;
+    }
+    for output in profile
+        .outputs
+        .iter()
+        .filter(|f| matches!(f.desc, OutputDesc::Any))
+    {
+        let position = (0..state.heads.len())
+            .find(|i| !used_indices.contains(i))
+            .ok_or_else(|| KanskeError::HeadNotFound {
+                name: "*".to_string(),
+            })?;
+        used_indices.insert(position);
+        let current_head = &state.heads[position];
+        debug!(head = %current_head.name, "Wildcard output consuming head");
+        configure_head(output, &output_configuration, current_head, qh)?;
+    }
+    output_configuration.apply();
+    Ok((profile.execs.clone(), Some(output_configuration)))
 }
 
 fn configure_head<D>(

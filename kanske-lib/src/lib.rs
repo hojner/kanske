@@ -1,6 +1,7 @@
 pub mod applier;
 pub mod composer;
 pub mod error;
+pub mod ipc;
 pub mod matcher;
 pub mod parser;
 pub mod paths;
