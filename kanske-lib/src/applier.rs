@@ -16,15 +16,24 @@ use crate::{
     wayland_interface::{HeadInfo, WaylandState},
 };
 
+/// The name and exec directives of a profile that was just applied. Deliberately does not
+/// carry the profile's `outputs`, which are only needed while applying and are otherwise
+/// unused by callers (avoids cloning output/command data that's already been consumed).
+#[derive(Debug, Clone, PartialEq)]
+pub struct AppliedProfile {
+    pub name: Option<String>,
+    pub execs: Vec<ExecDirective>,
+}
+
 /// Finds a matching profile and applies its output configuration.
-/// Returns the list of exec directives and the pending configuration object (if a profile
-/// matched). The caller must destroy the configuration object after the roundtrip that
-/// delivers `Succeeded`/`Failed`/`Cancelled`.
+/// Returns the applied profile (if one matched) and the pending configuration object. The
+/// caller must destroy the configuration object after the roundtrip that delivers
+/// `Succeeded`/`Failed`/`Cancelled`.
 pub fn find_and_apply_profile<D>(
     state: &mut WaylandState,
     qh: &QueueHandle<D>,
     config: &Config,
-) -> AppResult<(Vec<ExecDirective>, Option<ZwlrOutputConfigurationV1>)>
+) -> AppResult<(Option<AppliedProfile>, Option<ZwlrOutputConfigurationV1>)>
 where
     D: Dispatch<ZwlrOutputConfigurationV1, ()>
         + Dispatch<ZwlrOutputConfigurationHeadV1, ()>
@@ -32,7 +41,7 @@ where
 {
     match find_matching_profile(&state.heads, config) {
         Some(profile) => apply_profile(state, qh, profile),
-        None => Ok((Vec::new(), None)),
+        None => Ok((None, None)),
     }
 }
 
@@ -44,7 +53,7 @@ pub fn apply_named_profile<D>(
     qh: &QueueHandle<D>,
     config: &Config,
     name: &str,
-) -> AppResult<(Vec<ExecDirective>, Option<ZwlrOutputConfigurationV1>)>
+) -> AppResult<(Option<AppliedProfile>, Option<ZwlrOutputConfigurationV1>)>
 where
     D: Dispatch<ZwlrOutputConfigurationV1, ()>
         + Dispatch<ZwlrOutputConfigurationHeadV1, ()>
@@ -64,14 +73,14 @@ where
 }
 
 /// Applies the given profile's output configuration to the currently connected heads.
-/// Returns the list of exec directives and the pending configuration object. The caller
-/// must destroy the configuration object after the roundtrip that delivers
+/// Returns the applied profile and the pending configuration object. The caller must
+/// destroy the configuration object after the roundtrip that delivers
 /// `Succeeded`/`Failed`/`Cancelled`.
 fn apply_profile<D>(
     state: &mut WaylandState,
     qh: &QueueHandle<D>,
     profile: &Profile,
-) -> AppResult<(Vec<ExecDirective>, Option<ZwlrOutputConfigurationV1>)>
+) -> AppResult<(Option<AppliedProfile>, Option<ZwlrOutputConfigurationV1>)>
 where
     D: Dispatch<ZwlrOutputConfigurationV1, ()>
         + Dispatch<ZwlrOutputConfigurationHeadV1, ()>
@@ -126,7 +135,11 @@ where
         configure_head(output, &output_configuration, current_head, qh)?;
     }
     output_configuration.apply();
-    Ok((profile.execs.clone(), Some(output_configuration)))
+    let applied = AppliedProfile {
+        name: profile.name.clone(),
+        execs: profile.execs.clone(),
+    };
+    Ok((Some(applied), Some(output_configuration)))
 }
 
 fn configure_head<D>(

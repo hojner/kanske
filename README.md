@@ -39,6 +39,27 @@ Kanshi.
 
 There are, at the time of writing, no unsafe blocks in Kanske.
 
+## kanskectl
+
+`kanskectl` is the control CLI for a running `kanske` daemon.
+
+- `kanskectl list` — print the currently connected outputs.
+- `kanskectl reload` — reload the config file and re-apply a matching profile.
+- `kanskectl status` — show the currently applied profile and connected head
+  count.
+- `kanskectl switch <profile>` — manually apply a named profile from your
+  config, regardless of whether it matches the currently connected outputs.
+
+**Note on `switch` with partial profiles:** `switch` only configures the
+outputs explicitly listed in the target profile's `output` directives. If a
+profile doesn't mention every currently connected monitor (e.g. a
+`laptop-only` profile that only configures the laptop panel while an external
+monitor is still plugged in), the unmentioned monitor is left untouched at
+its previous position — it is **not** automatically disabled. This can result
+in overlapping outputs and a corresponding warning from your compositor. If
+you want a `switch` target to fully take over your screen layout, make sure
+its profile explicitly configures (or disables) every output you care about.
+
 ## The service enabling
 
 Kanske is a long-running daemon, so you'll typically want to start it

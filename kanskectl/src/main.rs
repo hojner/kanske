@@ -1,11 +1,14 @@
 use nix::{errno::Errno, sys::signal, unistd::Pid};
 use std::fs;
+use std::io::{BufRead, BufReader, Write};
+use std::os::unix::net::UnixStream;
 
 use clap::{Parser, Subcommand};
 use kanske_lib::{
     AppResult,
     error::KanskeError,
-    paths::pid_file_path,
+    ipc::{Request, Response},
+    paths::{pid_file_path, socket_path},
     wayland_interface::{WaylandState, connect},
 };
 
@@ -25,7 +28,10 @@ enum Commands {
     /// Status show current applied profile
     Status,
     /// Manually switch profile
-    Switch,
+    Switch {
+        /// Name of the profile to apply
+        profile: String,
+    },
 }
 
 fn main() {
@@ -38,8 +44,14 @@ fn main() {
             Ok(_) => println!("Kanske config reloaded"),
             Err(e) => println!("Kanske reload failed: {}", e),
         },
-        Commands::Status => todo!(),
-        Commands::Switch => todo!(),
+        Commands::Status => match status() {
+            Ok(msg) => println!("{}", msg),
+            Err(e) => println!("Kanske status failed: {}", e),
+        },
+        Commands::Switch { profile } => match switch(&profile) {
+            Ok(msg) => println!("{}", msg),
+            Err(e) => println!("Kanske switch failed: {}", e),
+        },
     }
 }
 
@@ -76,3 +88,27 @@ fn reload() -> AppResult<()> {
     println!("Sent SIGHUP to kanske (pid {})", pid);
     Ok(())
 }
+
+fn status() -> AppResult<String> {
+    send_request(&Request::Status)
+}
+
+fn switch(profile: &str) -> AppResult<String> {
+    send_request(&Request::Switch(profile.to_string()))
+}
+
+fn send_request(request: &Request) -> AppResult<String> {
+    let path = socket_path()?;
+    let mut stream = UnixStream::connect(&path).map_err(|_| KanskeError::DaemonNotRunning)?;
+
+    writeln!(stream, "{}", request.to_line())?;
+
+    let mut line = String::new();
+    BufReader::new(&stream).read_line(&mut line)?;
+
+    match Response::from_line(&line)? {
+        Response::Ok(msg) => Ok(msg),
+        Response::Err(msg) => Err(KanskeError::IpcError(msg)),
+    }
+}
+

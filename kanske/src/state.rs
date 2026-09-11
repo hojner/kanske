@@ -15,6 +15,14 @@ pub struct KanskeState {
     pub connection: Connection,
     pub last_serial: Option<u32>,
     pub reload_pending: bool,
+    pub current_profile: Option<String>,
+    /// Set when a profile was just applied manually via `kanskectl switch`. The next
+    /// serial change is the compositor acknowledging that switch, not a hotplug or config
+    /// reload, so `apply_if_changed` must skip re-matching a profile against the (now
+    /// stale, since a manual switch may not match any profile) live head set — otherwise
+    /// it would silently revert the manual switch back to whatever profile matches the
+    /// physical heads.
+    pub manual_switch_pending: bool,
 }
 
 impl Dispatch<wl_registry::WlRegistry, ()> for KanskeState {

@@ -1,4 +1,5 @@
 pub mod exec;
+pub mod ipc_server;
 pub mod state;
 
 use calloop::{
@@ -65,6 +66,8 @@ fn run() -> AppResult<()> {
         connection: connection.clone(),
         last_serial: None,
         reload_pending: false,
+        current_profile: None,
+        manual_switch_pending: false,
     };
     event_queue.roundtrip(&mut state)?;
     event_queue.roundtrip(&mut state)?;
@@ -72,13 +75,16 @@ fn run() -> AppResult<()> {
     // Apply a matching profile immediately on startup (like kanshi does),
     // rather than waiting for the first hotplug event.
     match find_and_apply_profile(&mut state.wayland, &state.queue_handle, &state.config) {
-        Ok((execs, config_obj)) => {
+        Ok((applied, config_obj)) => {
             info!("Initial profile applied");
-            run_exec_commands(&execs);
+            if let Some(applied) = &applied {
+                run_exec_commands(&applied.execs);
+            }
             event_queue.roundtrip(&mut state)?;
             if let Some(c) = config_obj {
                 c.destroy();
             }
+            state.current_profile = applied.and_then(|p| p.name);
             state.last_serial = state.wayland.serial;
         }
         Err(KanskeError::NoSerial | KanskeError::ManagerNotAvailable) => {
@@ -135,6 +141,9 @@ fn run() -> AppResult<()> {
         )
         .map_err(|e| KanskeError::CalloopError(e.to_string()))?;
 
+    let (socket_listener, _socket_guard) = ipc_server::create_socket()?;
+    ipc_server::register(&loop_handle, socket_listener)?;
+
     let pid_path = pid_file_path()?;
     fs::write(&pid_path, std::process::id().to_string())?;
     let _pid_guard = PidFailGuard(pid_path.clone());
@@ -178,6 +187,11 @@ fn apply_if_changed(state: &mut KanskeState, queue: &mut EventQueue<KanskeState>
     if state.wayland.serial == state.last_serial || state.wayland.serial.is_none() {
         return Ok(());
     }
+    if std::mem::take(&mut state.manual_switch_pending) {
+        debug!(new_serial = ?state.wayland.serial, "Manual profile switch acknowledged by compositor");
+        state.last_serial = state.wayland.serial;
+        return Ok(());
+    }
     let reason = if std::mem::take(&mut state.reload_pending) {
         "Config reloaded"
     } else {
@@ -188,8 +202,11 @@ fn apply_if_changed(state: &mut KanskeState, queue: &mut EventQueue<KanskeState>
 
     let config_obj =
         match find_and_apply_profile(&mut state.wayland, &state.queue_handle, &state.config) {
-            Ok((execs, config_obj)) => {
-                run_exec_commands(&execs);
+            Ok((applied, config_obj)) => {
+                if let Some(applied) = &applied {
+                    run_exec_commands(&applied.execs);
+                }
+                state.current_profile = applied.and_then(|p| p.name);
                 config_obj
             }
             Err(e @ (KanskeError::ManagerNotAvailable | KanskeError::NoSerial)) => {
