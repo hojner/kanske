@@ -95,6 +95,39 @@ where
     let serial = state.serial.ok_or(KanskeError::NoSerial)?;
     let output_configuration = manager.create_configuration(serial, qh, ());
 
+    if let Err(e) = configure_outputs(state, qh, profile, &output_configuration, &mut used_indices)
+    {
+        // Some heads may have already been staged on this configuration object before
+        // the failure (e.g. a named output with no matching head). Since `.apply()` is
+        // never reached, the object would otherwise never be applied nor destroyed —
+        // leaking it both client- and server-side.
+        output_configuration.destroy();
+        return Err(e);
+    }
+
+    output_configuration.apply();
+    let applied = AppliedProfile {
+        name: profile.name.clone(),
+        execs: profile.execs.clone(),
+    };
+    Ok((Some(applied), Some(output_configuration)))
+}
+
+/// Stages `enable_head`/`disable_head` requests (and their commands) on `output_configuration`
+/// for every output in `profile`, matching named/described outputs first and wildcards last.
+/// Does not call `.apply()` or `.destroy()` — that's the caller's responsibility.
+fn configure_outputs<D>(
+    state: &WaylandState,
+    qh: &QueueHandle<D>,
+    profile: &Profile,
+    output_configuration: &ZwlrOutputConfigurationV1,
+    used_indices: &mut HashSet<usize>,
+) -> AppResult<()>
+where
+    D: Dispatch<ZwlrOutputConfigurationV1, ()>
+        + Dispatch<ZwlrOutputConfigurationHeadV1, ()>
+        + 'static,
+{
     for output in profile
         .outputs
         .iter()
@@ -117,7 +150,7 @@ where
         used_indices.insert(position);
         let current_head = &state.heads[position];
         debug!(output = ?output.desc, head = %current_head.name, "Named output matched to head");
-        configure_head(output, &output_configuration, current_head, qh)?;
+        configure_head(output, output_configuration, current_head, qh)?;
     }
     for output in profile
         .outputs
@@ -132,14 +165,9 @@ where
         used_indices.insert(position);
         let current_head = &state.heads[position];
         debug!(head = %current_head.name, "Wildcard output consuming head");
-        configure_head(output, &output_configuration, current_head, qh)?;
+        configure_head(output, output_configuration, current_head, qh)?;
     }
-    output_configuration.apply();
-    let applied = AppliedProfile {
-        name: profile.name.clone(),
-        execs: profile.execs.clone(),
-    };
-    Ok((Some(applied), Some(output_configuration)))
+    Ok(())
 }
 
 fn configure_head<D>(
