@@ -13,7 +13,7 @@ keywords = ["wayland", "display", "monitor", "hotplug", "compositor"]
 categories = ["command-line-utilities"]
 
 [dependencies]
-kanske-lib = { path = "../kanske-lib" }
+kanske-lib = { path = "../kanske-lib", version = "1.0.1" }
 clap.workspace = true
 nix = { workspace = true, features = ["signal"] }
 
