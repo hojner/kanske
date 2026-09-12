@@ -12,7 +12,9 @@ use crate::{
     AppResult,
     error::KanskeError,
     matcher::find_matching_profile,
-    parser::ast::{Config, ConfigItem, ExecDirective, OutputCommand, OutputConfig, OutputDesc, Profile},
+    parser::ast::{
+        Config, ConfigItem, ExecDirective, OutputCommand, OutputConfig, OutputDesc, Profile,
+    },
     wayland_interface::{HeadInfo, WaylandState},
 };
 

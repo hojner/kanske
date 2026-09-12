@@ -50,7 +50,10 @@ pub fn create_socket() -> AppResult<(UnixListener, SocketFailGuard)> {
 
 /// Registers the control socket with the event loop. On readiness, accepts and fully
 /// handles every pending connection (one request/response each) before yielding.
-pub fn register(loop_handle: &LoopHandle<'_, KanskeState>, listener: UnixListener) -> AppResult<()> {
+pub fn register(
+    loop_handle: &LoopHandle<'_, KanskeState>,
+    listener: UnixListener,
+) -> AppResult<()> {
     loop_handle
         .insert_source(
             Generic::new(listener, Interest::READ, Mode::Level),

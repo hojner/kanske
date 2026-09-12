@@ -111,4 +111,3 @@ fn send_request(request: &Request) -> AppResult<String> {
         Response::Err(msg) => Err(KanskeError::IpcError(msg)),
     }
 }
-
